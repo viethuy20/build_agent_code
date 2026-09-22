@@ -1,0 +1,16 @@
+{
+  "task_id": "TASK-001",
+  "title": "Ví dụ: thêm hàm cộng hai số vào utils",
+  "description": "Task mẫu để kiểm tra orchestrator chạy đúng flow trước khi dùng cho task DE thật.",
+  "requirements": [
+    "Thêm hàm add(a, b) trả về a + b vào file utils.py",
+    "Thêm ít nhất 1 unit test cho hàm này"
+  ],
+  "acceptance_criteria": [
+    "pytest chạy pass",
+    "Hàm add hoạt động đúng với số nguyên và số thực"
+  ],
+  "test_commands": [
+    "pytest -q"
+  ]
+}
