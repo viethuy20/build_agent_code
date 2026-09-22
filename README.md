@@ -1,110 +1,89 @@
-# DE Agent Orchestrator — MVP v0.1
+# Susu — Multi-Agent AI Software Engineering CLI (v0.3)
 
-Flow: **Codex (plan) → Orchestrator (Python) → Antigravity CLI `agy` (implement) → Orchestrator tự verify test → commit/stop**
+Flow tự động hoàn toàn:
+**User Prompt → Planner Subagent (khảo sát & lập plan) → Coder Subagent (implement) → Tester Verifier (tự chạy test & retry nếu fail) → Auto Git Commit**
 
-## Vì sao dùng Antigravity CLI (`agy`) thay vì Gemini CLI
+---
 
-Gemini CLI đã ngừng phục vụ tài khoản cá nhân (Google AI Pro/Ultra/Free) từ
-18/6/2026, thay thế bằng Antigravity CLI. Dùng `agy` để tận dụng quota
-Google Pro sẵn có, không phát sinh phí API riêng.
+## Tính năng nổi bật
 
-## Yêu cầu trước khi chạy
+1. **Lệnh CLI toàn cục `susu`:**
+   - Đã đóng gói thành command `susu`. Đứng ở bất kỳ project nào, bạn chỉ cần gõ 1 dòng lệnh.
+   - Tự động nhận diện thư mục hiện tại làm repo đích (`--repo .`).
+   - Log và lịch sử task được lưu trữ tập trung tại `~/.susu/` (không làm bẩn project của bạn).
 
-1. Cài Antigravity CLI, đăng nhập một lần thủ công:
-   ```bash
-   agy
-   # đăng nhập bằng Google account Pro của bạn, sau đó thoát (Ctrl+C hoặc /exit)
-   ```
-2. Kiểm tra `agy --version` để biết đang dùng bản nào — `agy` từng có bug
-   trả về stdout rỗng khi chạy dưới subprocess (xem phần "Lưu ý về bug agy"
-   bên dưới). `agy_worker.py` đã có lớp phòng thủ cho bug này, nhưng nếu
-   bạn thấy task liên tục FAILED với lý do "stdout rỗng", hãy thử cập nhật
-   `agy` lên bản mới nhất trước.
-3. Repo đích phải là git repo **sạch** (không có uncommitted changes) —
-   orchestrator sẽ từ chối chạy nếu không.
-4. Python 3.10+, không cần cài thêm thư viện ngoài (chỉ dùng standard library).
-5. Lệnh `script` phải có sẵn (mặc định có trên Linux/macOS). **Chưa hỗ trợ
-   Windows** — chạy qua WSL nếu bạn dùng Windows.
+2. **Chế độ Full-Auto (Không cần tự viết hay tự đọc plan):**
+   - **Subagent 1 (Planner):** Tự động đọc repository đích, xác định convention/test framework, và tự sinh `task.json` + `plan.md`.
+   - **Subagent 2 (Coder):** Nhận plan và tự implement code trên branch Git riêng biệt (`agent/<task_id>`).
+   - **Tester Verifier:** Tự động chạy test độc lập (`unittest`, `pytest`...). Nếu test fail, tự động gửi log lỗi bắt Coder sửa lại (tối đa 2 lần thử).
+   - **Git Manager:** Tự commit lên branch khi test PASS.
 
-## Chạy thử với task mẫu
+3. **Hỗ trợ Cross-Platform hoàn chỉnh (Windows & Linux/macOS):**
+   - Cơ chế `self_test()` tự động nhận diện cách tương tác tốt nhất với Antigravity CLI (`direct` / `pty` / `winpty`).
+   - Khắc phục triệt để lỗi Unicode UTF-8 console và decode subprocess trên Windows.
 
+4. **An toàn & Cách ly tuyệt đối:**
+   - Hoạt động trên branch riêng `agent/<task_id>`, không bao giờ sửa trực tiếp trên `main`.
+   - Bắt buộc repo đích phải có working tree sạch trước khi chạy.
+
+---
+
+## Cài đặt (Đã hoàn tất trên máy của bạn)
+
+Nếu cần cài đặt lại hoặc cập nhật code:
 ```bash
-cd de-agent
-python orchestrator/main.py --task tasks/TASK-001 --repo /path/to/target/repo
+cd D:\AI\agent_code
+pip install -e .
 ```
 
-Kết quả:
-- Log chi tiết: `logs/TASK-001.log`
-- Log thô của agy (để debug): `logs/TASK-001.agy.raw.log`
-- Nếu PASS: code được commit trên branch `agent/TASK-001` của repo đích.
-- Nếu FAIL: branch vẫn giữ nguyên thay đổi (nếu có) để bạn xem xét bằng
-  tay, **không tự động retry**.
+---
 
-## Quy trình dùng thật với Codex
+## Hướng dẫn sử dụng siêu nhanh
 
-1. Trong Antigravity, đưa task cho Codex Agent với prompt kiểu:
-   > Analyze this task and repository. Do not implement the task. Create
-   > the implementation plan and save it to `tasks/TASK-XXX/plan.md`. Also
-   > create/update `tasks/TASK-XXX/task.json` with the structured task
-   > information (title, description, requirements, acceptance_criteria,
-   > test_commands).
-2. Bạn review `plan.md` — đây là bước human-in-the-loop duy nhất.
-3. Chạy orchestrator như trên.
+### Cách 1: Đọc yêu cầu từ file (Khuyên dùng — Tránh lỗi tiếng Việt PowerShell)
 
-## Nguyên tắc cốt lõi
+Tạo file `task.md` (hoặc `prompt.txt`) trong project, gõ tiếng Việt có dấu thoải mái trong VSCode, rồi chạy:
+```powershell
+susu -f task.md
+```
 
-1. **Codex lập kế hoạch, agy thực thi.** Không lẫn lộn vai trò.
-2. **Orchestrator kiểm chứng, không tin agent tự báo cáo.** `test_runner.py`
-   luôn tự chạy lại `test_commands`, dù agy có nói "tests passed" hay không.
-3. **Agent không có quyền tự do chạm production.** `agy` chạy với
-   `--dangerously-skip-permissions` để tự động approve tool call — vì vậy:
-   - **KHÔNG** để credential thật (AWS, DB production, API key thật) trong
-     environment variables khi chạy orchestrator này.
-   - `--add-dir` luôn giới hạn agy vào đúng thư mục repo đích, không cho
-     truy cập ngoài phạm vi đó.
-   - Nên trỏ `--repo` vào một clone riêng để thử nghiệm, không phải repo
-     đang có kết nối trực tiếp tới production, cho tới khi bạn tin tưởng
-     hệ thống.
+### Cách 2: Gõ trực tiếp trên terminal
+```powershell
+susu "Them ham format_currency vao utils.py va viet test"
+```
+*(Susu sẽ tự động lấy thư mục bạn đang đứng làm repo đích!)*
 
-## Lưu ý về bug agy (silent empty stdout)
+### Cách 3: Chỉ định repo từ xa
+```powershell
+susu -f task.md --repo D:\projects\my_app
+```
 
-`agy --print`/`-p` có bug đã xác nhận trên nhiều bản: khi stdout không phải
-TTY thật (tức mọi trường hợp subprocess/pipe), agy chạy xong, tốn round-trip
-với model, exit code = 0, nhưng không in gì ra stdout — không thể phân biệt
-"model trả lời rỗng" với "câu trả lời bị nuốt mất".
+### Cách 4: Dùng task.json và plan.md có sẵn
+```powershell
+susu --task tasks/TASK-001
+```
 
-`agy_worker.py` xử lý bằng 2 lớp:
-1. Bọc lệnh trong pseudo-TTY (`script -qec`) để agy tưởng đang chạy trong
-   terminal thật.
-2. Nếu vẫn rỗng, thử phục hồi từ transcript agy tự lưu trong
-   `~/.gemini/antigravity-cli/conversations/` (best-effort).
+---
 
-Nếu cả hai đều thất bại, task được đánh dấu **FAILED** rõ ràng thay vì âm
-thầm coi như thành công — bạn sẽ thấy lý do cụ thể trong log.
+## Kết quả đầu ra
 
-## Chưa có ở MVP này (theo đúng roadmap đã chốt)
+- **Mã nguồn:** Tự động commit trên branch `agent/<task_id>` của repo đích nếu test pass.
+- **Kế hoạch & Nhật ký:** Được lưu tập trung tại:
+  - `~/.susu/tasks/<task_id>/`
+  - `~/.susu/logs/<task_id>.log`
 
-❌ Redis, PostgreSQL, Docker, Kubernetes
-❌ Dashboard, multi-agent, test agent riêng, skill router
-❌ Auto-retry khi test fail (Phase 4)
-❌ Codex CLI tự động hoàn toàn (Phase 2) — hiện vẫn cần bạn copy plan qua
-Antigravity thủ công (dù đã bớt thao tác copy-paste nhờ Codex ghi thẳng
-ra file)
+---
 
-## Cấu trúc thư mục
+## Cấu trúc mã nguồn
 
 ```
-de-agent/
-├── orchestrator/
-│   ├── main.py          # entry point, ghép toàn bộ flow
-│   ├── agy_worker.py     # gọi Antigravity CLI headless + xử lý bug stdout
-│   ├── git_manager.py    # tạo branch, commit, kiểm tra working tree
-│   ├── test_runner.py    # tự chạy lại test, không tin agent báo cáo
-│   └── logger.py         # ghi log theo task
-├── tasks/
-│   └── TASK-001/
-│       ├── task.json      # dữ liệu có cấu trúc cho máy đọc
-│       └── plan.md        # kế hoạch cho agent đọc (Codex tạo ra)
-├── logs/                 # log runtime, tự sinh khi chạy
-└── worktrees/            # dành cho Phase 3 (multiple agents), chưa dùng
+agent_code/
+├── setup.py         # Cấu hình cài đặt CLI console script 'susu'
+├── pyproject.toml   # Chuẩn packaging hiện đại
+├── main.py          # Orchestrator / Supervisor điều phối toàn bộ flow
+├── planner.py       # Subagent 1: Khảo sát repo, sinh plan.md và task.json
+├── agy_worker.py    # Subagent 2: Gọi Antigravity CLI headless để code
+├── test_runner.py   # Verifier: Tự chạy lại test, kiểm thử khách quan
+├── git_manager.py   # Quản lý branch cô lập, diff stat và auto-commit
+└── logger.py        # Ghi log thời gian thực theo từng task
 ```

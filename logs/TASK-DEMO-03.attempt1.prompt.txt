@@ -1,0 +1,89 @@
+Bạn là implementation worker cho một task Data Engineering.
+Không cần hỏi lại người dùng — hãy tự đọc repository hiện tại và implement
+theo đúng kế hoạch dưới đây.
+
+# Task: Thêm hàm multiply vào utils.py và viết test trong test_utils.py
+
+## Mô tả
+Triển khai hàm multiply(a, b) trả về tích a * b vào utils.py và xây dựng bộ kiểm thử đơn vị hoàn chỉnh trong test_utils.py sử dụng framework unittest để xác thực tính đúng đắn.
+
+## Yêu cầu
+- Tạo file utils.py tại thư mục gốc của repository nếu chưa tồn tại
+- Định nghĩa hàm multiply(a, b) nhận hai tham số a, b và trả về tích a * b trong utils.py
+- Tạo file test_utils.py kế thừa unittest.TestCase để kiểm thử toàn diện hàm multiply
+- Bao phủ các trường hợp kiểm thử: số nguyên dương, số âm, số 0, số thực (float), và nhân với 1 (identity)
+
+## Tiêu chí nghiệm thu
+- Hàm multiply(a, b) được định nghĩa chuẩn xác trong utils.py và trả về đúng tích a * b
+- File test_utils.py sử dụng framework unittest và kế thừa unittest.TestCase
+- Tất cả các test case trong test_utils.py đều vượt qua (exit code 0)
+- Mã nguồn tuân thủ tiêu chuẩn PEP 8 và có type hints đầy đủ
+
+## Kế hoạch implementation (đã được duyệt trước)
+# Implementation Plan — TASK-DEMO-03
+
+## 1. Inspect & Architecture
+- **Hiện trạng repository (`D:/AI/test_sandbox`)**:
+  - Kho lưu trữ hiện tại chỉ có file [README.md](file:///D:/AI/test_sandbox/README.md) và thư mục git `.git`.
+  - Chưa tồn tại mã nguồn hoặc tệp kiểm thử nào ([utils.py](file:///D:/AI/test_sandbox/utils.py) và [test_utils.py](file:///D:/AI/test_sandbox/test_utils.py) chưa được tạo).
+  - Môi trường thực thi: Python 3.10.6 trên Windows.
+- **Convention & Kiến trúc**:
+  - Ngôn ngữ: Python 3.
+  - Chuẩn mã nguồn: Tuân thủ quy chuẩn PEP 8, bao gồm docstring mô tả hàm và type hints rõ ràng (`a: int | float, b: int | float -> int | float`).
+  - Cấu trúc module:
+    - [utils.py](file:///D:/AI/test_sandbox/utils.py): Mô-đun chứa hàm tiện ích `multiply(a, b)` tại thư mục gốc repository.
+    - [test_utils.py](file:///D:/AI/test_sandbox/test_utils.py): Mô-đun kiểm thử đơn vị cho `utils.py` tại thư mục gốc repository.
+  - Framework kiểm thử: Thư viện chuẩn `unittest` tích hợp sẵn trong Python, không phụ thuộc thư viện ngoài.
+
+## 2. Implementation Steps
+- **Bước 1: Tạo module `utils.py`**
+  - Vị trí: `D:/AI/test_sandbox/utils.py`.
+  - Triển khai hàm `multiply`:
+    ```python
+    def multiply(a: int | float, b: int | float) -> int | float:
+        """Tính và trả về tích của hai số a và b."""
+        return a * b
+    ```
+  - Đảm bảo hàm xử lý chính xác cho cả số nguyên (`int`) và số thực (`float`).
+
+- **Bước 2: Tạo module kiểm thử `test_utils.py`**
+  - Vị trí: `D:/AI/test_sandbox/test_utils.py`.
+  - Cấu trúc:
+    - Import thư viện `unittest`.
+    - Import hàm `multiply` từ module `utils`: `from utils import multiply`.
+    - Định nghĩa lớp kiểm thử `TestUtils(unittest.TestCase)`.
+    - Thêm khối `if __name__ == '__main__': unittest.main()`.
+
+## 3. Test Strategy
+Xây dựng các test cases trong lớp `TestUtils` kế thừa `unittest.TestCase`:
+- `test_multiply_positive_numbers`: Kiểm thử phép nhân hai số nguyên dương (ví dụ: `multiply(3, 5) == 15`).
+- `test_multiply_negative_numbers`: Kiểm thử phép nhân với số âm:
+  - Tích hai số âm: `multiply(-2, -4) == 8`.
+  - Tích số âm và số dương: `multiply(-3, 6) == -18`.
+- `test_multiply_by_zero`: Kiểm thử phép nhân với số 0:
+  - Nhân một số bất kỳ với 0: `multiply(10, 0) == 0`.
+  - Nhân 0 với 0: `multiply(0, 0) == 0`.
+- `test_multiply_floats`: Kiểm thử phép nhân số thực (sử dụng `self.assertAlmostEqual` cho các phép tính số chấm động nhạy cảm, ví dụ `multiply(0.1, 0.2)` hoặc `multiply(2.5, 4) == 10.0`).
+- `test_multiply_identity`: Kiểm thử nhân với phần tử đơn vị 1: `multiply(42, 1) == 42`.
+
+## 4. Verification
+Chạy các lệnh kiểm thử từ thư mục gốc `D:/AI/test_sandbox`:
+```bash
+python -m unittest test_utils.py
+```
+Hoặc:
+```bash
+python -m unittest discover -s . -p "test_*.py"
+```
+**Tiêu chí hoàn thành:**
+- Exit code của lệnh test bằng 0.
+- Tất cả các test cases đều đạt trạng thái `OK` (pass 100%).
+
+
+## Việc bạn cần làm
+1. Đọc code hiện có trong repository để hiểu convention đang dùng.
+2. Implement đúng theo kế hoạch ở trên, không tự ý mở rộng phạm vi.
+3. Sau khi implement xong, DỪNG LẠI. Không cần tự chạy test hay tự commit
+   — phần đó do hệ thống bên ngoài đảm nhiệm.
+4. Không được: chạm vào credential thật, gọi API production, xoá dữ liệu,
+   force-push, hoặc thay đổi file ngoài phạm vi task này.

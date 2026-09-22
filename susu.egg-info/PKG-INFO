@@ -1,0 +1,89 @@
+Metadata-Version: 2.4
+Name: susu
+Version: 0.3.0
+Summary: Susu — Multi-Agent AI Software Engineering CLI
+Author: viethuy20
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Dynamic: requires-python
+
+# DE Agent Orchestrator — Multi-Subagent (v0.3)
+
+Flow tự động hoàn toàn:
+**User Prompt → Planner Subagent (khảo sát & lập plan) → Coder Subagent (implement) → Tester Verifier (tự chạy test & retry nếu fail) → Auto Git Commit**
+
+---
+
+## Tính năng nổi bật trong bản v0.3
+
+1. **Chế độ Full-Auto (Không cần tự viết hay tự đọc plan):**
+   - Người dùng chỉ cần cung cấp 1 câu mô tả task (qua flag `--prompt`).
+   - **Subagent 1 (Planner):** Tự động đọc repository đích, xác định convention/test framework, và tự sinh `task.json` + `plan.md`.
+   - **Subagent 2 (Coder):** Nhận plan và tự implement code trên branch Git riêng biệt (`agent/<task_id>`).
+   - **Tester Verifier:** Tự động chạy test độc lập (`unittest`, `pytest`...). Nếu test fail, tự động gửi log lỗi bắt Coder sửa lại (tối đa 2 lần thử).
+   - **Git Manager:** Tự commit lên branch khi test PASS.
+
+2. **Hỗ trợ Cross-Platform hoàn chỉnh (Windows & Linux/macOS):**
+   - Cơ chế `self_test()` tự động nhận diện cách tương tác tốt nhất với Antigravity CLI (`direct` / `pty` / `winpty`).
+   - Khắc phục triệt để lỗi Unicode UTF-8 console và decode subprocess trên Windows.
+
+3. **An toàn & Cách ly tuyệt đối:**
+   - Hoạt động trên branch riêng `agent/<task_id>`, không bao giờ sửa trực tiếp trên `main`.
+   - Bắt buộc repo đích phải có working tree sạch trước khi chạy.
+
+---
+
+## Yêu cầu trước khi chạy
+
+1. Cài Antigravity CLI và đăng nhập một lần:
+   ```bash
+   agy
+   # đăng nhập tài khoản Google của bạn, sau đó thoát (/exit)
+   ```
+2. Python 3.10+, chỉ dùng thư viện chuẩn (không cần cài thêm pip packages).
+3. Repo đích phải là Git repo sạch (không có uncommitted changes).
+
+---
+
+## Hướng dẫn sử dụng
+
+### Cách 1: Full-Auto (Khuyên dùng — Chỉ 1 dòng lệnh)
+
+Chỉ cần gõ mô tả task, hệ thống Subagents tự làm toàn bộ:
+```bash
+python main.py --prompt "Thêm hàm multiply(a, b) vào utils.py và viết test unittest" --repo /path/to/target/repo
+```
+
+### Cách 2: Semi-Auto (Dùng task.json và plan.md có sẵn)
+
+Nếu bạn đã có sẵn file kế hoạch trong thư mục task:
+```bash
+python main.py --task tasks/TASK-001 --repo /path/to/target/repo
+```
+
+---
+
+## Kết quả đầu ra
+
+- **Mã nguồn:** Tự động commit trên branch `agent/<task_id>` của repo đích nếu test pass.
+- **Kế hoạch:** Được lưu lại tại `tasks/<task_id>/task.json` và `tasks/<task_id>/plan.md`.
+- **Nhật ký:**
+  - Log tổng hợp: `logs/<task_id>.log`
+  - Log chi tiết của Planner: `logs/<task_id>.planner.agy.log`
+  - Log chi tiết của Coder: `logs/<task_id>.attempt1.agy.log`
+
+---
+
+## Cấu trúc mã nguồn
+
+```
+agent_code/
+├── main.py          # Orchestrator / Supervisor điều phối toàn bộ flow
+├── planner.py       # Subagent 1: Khảo sát repo, sinh plan.md và task.json
+├── agy_worker.py    # Subagent 2: Gọi Antigravity CLI headless để code
+├── test_runner.py   # Verifier: Tự chạy lại test, kiểm thử khách quan
+├── git_manager.py   # Quản lý branch cô lập, diff stat và auto-commit
+├── logger.py        # Ghi log thời gian thực theo từng task
+├── tasks/           # Nơi lưu trữ các task.json và plan.md đã sinh
+└── logs/            # Nơi lưu trữ log thực thi
+```

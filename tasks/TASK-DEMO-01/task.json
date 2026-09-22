@@ -1,0 +1,20 @@
+{
+  "task_id": "TASK-DEMO-01",
+  "title": "Thêm hàm multiply vào utils.py và viết test trong test_utils.py",
+  "description": "Triển khai hàm multiply(a, b) trả về tích a * b vào utils.py và viết bộ kiểm thử đơn vị trong test_utils.py sử dụng framework unittest để xác minh tính đúng đắn.",
+  "requirements": [
+    "Tạo file utils.py tại thư mục gốc repository nếu chưa có",
+    "Định nghĩa hàm multiply(a, b) trả về giá trị a * b trong utils.py",
+    "Tạo file test_utils.py kế thừa unittest.TestCase để kiểm thử hàm multiply",
+    "Bao phủ các trường hợp kiểm thử: số nguyên dương, số âm, số 0, số thực (float)"
+  ],
+  "acceptance_criteria": [
+    "Hàm multiply(a, b) tồn tại trong utils.py và trả về đúng tích của a và b",
+    "File test_utils.py sử dụng unittest framework và bao phủ đầy đủ các test case cần thiết",
+    "Tất cả các unit tests trong test_utils.py chạy thành công (exit code 0)"
+  ],
+  "test_commands": [
+    "python -m unittest test_utils.py",
+    "python -m unittest discover -s . -p \"test_*.py\""
+  ]
+}

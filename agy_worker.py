@@ -68,6 +68,10 @@ def _check_agy_installed() -> None:
         )
 
 
+def get_agy_bin() -> str:
+    return shutil.which("agy") or "agy"
+
+
 def _is_windows() -> bool:
     return platform.system().lower() == "windows"
 
@@ -83,7 +87,7 @@ def _stream_process(
     cwd: pathlib.Path,
     log_path: pathlib.Path,
     timeout_seconds: int,
-    heartbeat_seconds: int = 180,
+    heartbeat_seconds: int | None = None,
     env: dict | None = None,
 ) -> tuple[int, str]:
     """Chạy argv qua Popen, đọc stdout/stderr theo dòng, ghi log real-time.
@@ -103,6 +107,8 @@ def _stream_process(
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         bufsize=1,
     )
 
@@ -139,12 +145,23 @@ def _stream_process(
             killed_reason = f"Vượt timeout tổng {timeout_seconds}s"
             proc.kill()
             break
-        if now - last_activity > heartbeat_seconds:
+        if heartbeat_seconds and (now - last_activity > heartbeat_seconds):
             killed_reason = f"Không có log mới trong {heartbeat_seconds}s -> nghi treo"
             proc.kill()
             break
 
     proc.wait()
+    t_out.join(timeout=2)
+    t_err.join(timeout=2)
+    while not q.empty():
+        try:
+            tag, line = q.get_nowait()
+            log_fh.write(line)
+            if tag == "OUT":
+                output_chunks.append(line)
+        except queue.Empty:
+            break
+
     log_fh.write(f"\n--- exit_code={proc.returncode} killed_reason={killed_reason} ---\n")
     log_fh.close()
 
@@ -163,47 +180,49 @@ def self_test(workdir: pathlib.Path, logs_dir: pathlib.Path) -> str:
     đổi giữa các lần gọi liên tiếp.
     """
     _check_agy_installed()
+    logs_dir.mkdir(parents=True, exist_ok=True)
     probe_log = logs_dir / "_agy_selftest.log"
     probe_prompt = "Reply with the word PONG only"
+    agy_bin = get_agy_bin()
 
     # 1. Gọi trực tiếp, list argument, không wrapper
     exit_code, output = _stream_process(
-        ["agy", "--dangerously-skip-permissions", "-p", probe_prompt],
+        [agy_bin, "--dangerously-skip-permissions", "-p", probe_prompt],
         cwd=workdir,
         log_path=probe_log,
-        timeout_seconds=60,
-        heartbeat_seconds=30,
+        timeout_seconds=90,
+        heartbeat_seconds=60,
     )
-    if exit_code == 0 and "PONG" in output:
+    if exit_code == 0 and "pong" in output.lower():
         return "direct"
 
     # 2. POSIX: thử pty wrapper qua `script -qec`, prompt truyền qua env var
     if not _is_windows() and shutil.which("script"):
         env = os.environ.copy()
         env["AGY_PROMPT"] = probe_prompt
-        inner = 'agy --dangerously-skip-permissions -p "$AGY_PROMPT"'
+        inner = f'"{agy_bin}" --dangerously-skip-permissions -p "$AGY_PROMPT"'
         exit_code, output = _stream_process(
             ["script", "-qec", inner, "/dev/null"],
             cwd=workdir,
             log_path=probe_log,
-            timeout_seconds=60,
-            heartbeat_seconds=30,
+            timeout_seconds=90,
+            heartbeat_seconds=60,
             env=env,
         )
         cleaned = _strip_pty_artifacts(output)
-        if exit_code == 0 and "PONG" in cleaned:
+        if exit_code == 0 and "pong" in cleaned.lower():
             return "pty"
 
     # 3. Windows: thử winpty nếu có cài (thường đi kèm Git Bash)
     if _is_windows() and shutil.which("winpty"):
         exit_code, output = _stream_process(
-            ["winpty", "agy", "--dangerously-skip-permissions", "-p", probe_prompt],
+            ["winpty", agy_bin, "--dangerously-skip-permissions", "-p", probe_prompt],
             cwd=workdir,
             log_path=probe_log,
-            timeout_seconds=60,
-            heartbeat_seconds=30,
+            timeout_seconds=90,
+            heartbeat_seconds=60,
         )
-        if exit_code == 0 and "PONG" in output:
+        if exit_code == 0 and "pong" in output.lower():
             return "winpty"
 
     return "unrecoverable"
@@ -217,7 +236,7 @@ def run_agy(
     mode: str,
     attempt: int = 1,
     timeout_seconds: int = 1800,
-    heartbeat_seconds: int = 180,
+    heartbeat_seconds: int | None = None,
 ) -> AgyResult:
     """Chạy agy headless với prompt đã ghép sẵn.
 
@@ -252,10 +271,11 @@ def run_agy(
 
     add_dir = str(workdir)
     timeout_flag = f"{timeout_seconds}s"
+    agy_bin = get_agy_bin()
 
     if mode == "direct":
         argv = [
-            "agy", "--dangerously-skip-permissions",
+            agy_bin, "--dangerously-skip-permissions",
             "--add-dir", add_dir,
             "--print-timeout", timeout_flag,
             "-p", prompt,
@@ -267,7 +287,7 @@ def run_agy(
 
     elif mode == "winpty":
         argv = [
-            "winpty", "agy", "--dangerously-skip-permissions",
+            "winpty", agy_bin, "--dangerously-skip-permissions",
             "--add-dir", add_dir,
             "--print-timeout", timeout_flag,
             "-p", prompt,
@@ -283,7 +303,7 @@ def run_agy(
         env = os.environ.copy()
         env["AGY_PROMPT"] = prompt
         inner = (
-            f'agy --dangerously-skip-permissions '
+            f'"{agy_bin}" --dangerously-skip-permissions '
             f'--add-dir "{add_dir}" '
             f'--print-timeout "{timeout_flag}" '
             f'-p "$AGY_PROMPT"'

@@ -27,11 +27,32 @@ def _run_git(args: list[str], cwd: pathlib.Path) -> subprocess.CompletedProcess:
     return result
 
 
-def ensure_clean_worktree(repo_path: pathlib.Path) -> None:
+def init_if_needed(repo_path: pathlib.Path, base_branch: str = "main") -> bool:
+    """Nếu thư mục chưa phải là git repo, tự động khởi tạo git và commit ban đầu."""
+    if not (repo_path / ".git").exists():
+        init_res = _run_git(["init"], repo_path)
+        if init_res.returncode != 0:
+            raise GitError(f"git init thất bại: {init_res.stderr}")
+        _run_git(["branch", "-M", base_branch], repo_path)
+        status = _run_git(["status", "--porcelain"], repo_path)
+        if status.stdout.strip():
+            _run_git(["add", "-A"], repo_path)
+            _run_git(["commit", "-m", "Initial commit trước khi chạy Susu"], repo_path)
+        else:
+            keep_file = repo_path / ".gitkeep"
+            keep_file.touch()
+            _run_git(["add", ".gitkeep"], repo_path)
+            _run_git(["commit", "-m", "Initial commit"], repo_path)
+        return True
+    return False
+
+
+def ensure_clean_worktree(repo_path: pathlib.Path, base_branch: str = "main") -> None:
     """Chặn chạy task nếu working tree đang có thay đổi chưa commit.
 
-    Tránh trường hợp agent vô tình commit luôn cả thay đổi cũ của bạn.
+    Tự động git init nếu chưa có git.
     """
+    init_if_needed(repo_path, base_branch)
     result = _run_git(["status", "--porcelain"], repo_path)
     if result.returncode != 0:
         raise GitError(f"git status thất bại: {result.stderr}")
@@ -85,6 +106,9 @@ def commit_all(repo_path: pathlib.Path, message: str) -> str:
 
 
 def diff_stat(repo_path: pathlib.Path) -> str:
-    """Tóm tắt các file đã thay đổi, để ghi vào log."""
-    result = _run_git(["diff", "--stat"], repo_path)
-    return result.stdout.strip()
+    """Tóm tắt các file đã thay đổi (cả tracked và untracked), để ghi vào log."""
+    stat = _run_git(["status", "--short"], repo_path).stdout.strip()
+    diff = _run_git(["diff", "--stat"], repo_path).stdout.strip()
+    if stat and diff:
+        return f"{stat}\n\n{diff}"
+    return stat or diff

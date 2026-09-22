@@ -1,0 +1,82 @@
+Bạn là implementation worker cho một task Data Engineering.
+Không cần hỏi lại người dùng — hãy tự đọc repository hiện tại và implement
+theo đúng kế hoạch dưới đây.
+
+# Task: Thêm hàm multiply vào utils.py và viết test trong test_utils.py
+
+## Mô tả
+Triển khai hàm multiply(a, b) trả về tích a * b vào utils.py và viết bộ kiểm thử đơn vị trong test_utils.py sử dụng framework unittest để xác minh tính đúng đắn.
+
+## Yêu cầu
+- Tạo file utils.py tại thư mục gốc repository nếu chưa có
+- Định nghĩa hàm multiply(a, b) trả về giá trị a * b trong utils.py
+- Tạo file test_utils.py kế thừa unittest.TestCase để kiểm thử hàm multiply
+- Bao phủ các trường hợp kiểm thử: số nguyên dương, số âm, số 0, số thực (float)
+
+## Tiêu chí nghiệm thu
+- Hàm multiply(a, b) tồn tại trong utils.py và trả về đúng tích của a và b
+- File test_utils.py sử dụng unittest framework và bao phủ đầy đủ các test case cần thiết
+- Tất cả các unit tests trong test_utils.py chạy thành công (exit code 0)
+
+## Kế hoạch implementation (đã được duyệt trước)
+# Implementation Plan — TASK-DEMO-01
+
+## 1. Inspect & Architecture
+- **Hiện trạng repository (`D:/AI/test_sandbox`)**:
+  - Kho lưu trữ hiện tại chỉ có file [README.md](file:///D:/AI/test_sandbox/README.md) và thư mục quản lý phiên bản `.git`.
+  - Chưa có mã nguồn Python, chưa tồn tại file [utils.py](file:///D:/AI/test_sandbox/utils.py) cũng như [test_utils.py](file:///D:/AI/test_sandbox/test_utils.py).
+  - Môi trường thực thi: Python 3.10.x.
+- **Convention & Kiến trúc**:
+  - Ngôn ngữ: Python 3.
+  - Chuẩn mã nguồn: Tuân thủ PEP 8 (quy tắc đặt tên, docstring, định kiểu type hints).
+  - Cấu trúc module: Đặt trực tiếp tại thư mục gốc repository:
+    - [utils.py](file:///D:/AI/test_sandbox/utils.py): Mô-đun chứa các hàm tiện ích tính toán dùng chung.
+    - [test_utils.py](file:///D:/AI/test_sandbox/test_utils.py): Mô-đun chứa các bài kiểm thử đơn vị cho `utils.py`.
+  - Thư viện kiểm thử: Thư viện chuẩn `unittest` tích hợp sẵn trong Python, không yêu cầu cài thêm bên ngoài.
+
+## 2. Implementation Steps
+- **Bước 1: Tạo module tiện ích `utils.py`**
+  - Đường dẫn: `D:/AI/test_sandbox/utils.py`.
+  - Triển khai hàm `multiply(a, b)`:
+    ```python
+    def multiply(a: int | float, b: int | float) -> int | float:
+        """Tính và trả về tích của hai số a và b."""
+        return a * b
+    ```
+  - Đảm bảo hàm hỗ trợ tính toán chính xác đối với cả kiểu số nguyên (`int`) và số thực (`float`).
+
+- **Bước 2: Tạo module kiểm thử `test_utils.py`**
+  - Đường dẫn: `D:/AI/test_sandbox/test_utils.py`.
+  - Khai báo class `TestUtils(unittest.TestCase)` kế thừa từ `unittest.TestCase`.
+  - Import hàm `multiply` từ module `utils`.
+  - Thêm khối thực thi `if __name__ == '__main__': unittest.main()`.
+
+## 3. Test Strategy
+Các test case cần xây dựng trong lớp `TestUtils` kế thừa từ `unittest.TestCase`:
+- `test_multiply_positive_numbers`: Kiểm tra tích hai số nguyên dương (ví dụ: `2 * 3 == 6`).
+- `test_multiply_negative_numbers`: Kiểm tra tích các số âm và tích số âm với số dương (ví dụ: `(-2) * (-3) == 6`, `(-2) * 3 == -6`).
+- `test_multiply_by_zero`: Kiểm tra tích khi một hoặc cả hai thừa số bằng 0 (ví dụ: `5 * 0 == 0`, `0 * 0 == 0`).
+- `test_multiply_floats`: Kiểm tra phép nhân với số thực (ví dụ: `2.5 * 2 == 5.0`, `0.1 * 0.2` sử dụng `assertAlmostEqual`).
+- `test_multiply_identity`: Kiểm tra phần tử đơn vị của phép nhân (ví dụ: `7 * 1 == 7`).
+
+## 4. Verification
+Thực thi lệnh kiểm thử từ thư mục gốc của repository (`D:/AI/test_sandbox`):
+```bash
+python -m unittest test_utils.py
+```
+Hoặc sử dụng cơ chế test discovery:
+```bash
+python -m unittest discover -s . -p "test_*.py"
+```
+Tiêu chí xác nhận hoàn thành:
+- Exit code trả về 0.
+- Tất cả test cases đều ở trạng thái `OK` (pass 100%).
+
+
+## Việc bạn cần làm
+1. Đọc code hiện có trong repository để hiểu convention đang dùng.
+2. Implement đúng theo kế hoạch ở trên, không tự ý mở rộng phạm vi.
+3. Sau khi implement xong, DỪNG LẠI. Không cần tự chạy test hay tự commit
+   — phần đó do hệ thống bên ngoài đảm nhiệm.
+4. Không được: chạm vào credential thật, gọi API production, xoá dữ liệu,
+   force-push, hoặc thay đổi file ngoài phạm vi task này.

@@ -1,0 +1,13 @@
+[10:24:59] --------------------------------------------------
+[10:24:59] TASK TASK-DEMO-02 CREATED
+[10:24:59] --------------------------------------------------
+[10:24:59] repo=D:\AI\test_sandbox
+[10:24:59] task_dir=D:\AI\agent_code\tasks\TASK-DEMO-02
+[10:24:59] title=Thêm hàm multiply vào utils.py và viết test trong test_utils.py
+[10:24:59] BRANCH CREATED: agent/TASK-DEMO-02
+[10:24:59] AGY SELF-TEST STARTED (dò cách gọi phù hợp với máy này)
+[10:25:30] AGY SELF-TEST RESULT: mode=unrecoverable
+[10:25:30] Không tìm được cách nào lấy output thật từ agy trên máy này. Kiểm tra `agy --version` hoặc cài winpty (Windows).
+[10:25:30] --------------------------------------------------
+[10:25:30] TASK TASK-DEMO-02 FAILED
+[10:25:30] --------------------------------------------------

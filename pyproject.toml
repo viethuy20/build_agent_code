@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "susu"
+version = "0.3.0"
+description = "Susu — Multi-Agent AI Software Engineering CLI"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "viethuy20" }
+]
+
+[project.scripts]
+susu = "main:main"

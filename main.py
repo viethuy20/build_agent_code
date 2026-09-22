@@ -27,14 +27,26 @@ Cách chạy: giống v0.1
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import pathlib
 import sys
 
 import agy_worker
 import git_manager
-import test_runner
 from logger import TaskLogger
+import planner
+import test_runner
+
+# Đảm bảo in tiếng Việt trên console Windows không bị UnicodeEncodeError
+if sys.platform == "win32":
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 MAX_ATTEMPTS = 2  # hardcode có chủ đích — xem lý do trong README
 
@@ -105,18 +117,111 @@ Sau khi sửa xong, DỪNG LẠI — không tự chạy lại test.
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="DE Agent Orchestrator MVP v0.2")
-    parser.add_argument("--task", required=True, help="Thư mục task, vd: tasks/TASK-001")
-    parser.add_argument("--repo", required=True, help="Đường dẫn tới git repo đích")
-    parser.add_argument("--base-branch", default="main", help="Branch gốc để tạo nhánh agent/")
-    parser.add_argument("--timeout", type=int, default=1800, help="Timeout cho mỗi lần gọi agy (giây)")
+    parser = argparse.ArgumentParser(
+        prog="susu",
+        description="Susu — Multi-Agent AI Software Engineering CLI (Planner + Coder + Tester)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="Ví dụ sử dụng:\n"
+               "  susu \"Thêm hàm multiply(a, b) vào utils.py và viết test\"\n"
+               "  susu -f task.md\n"
+               "  susu -f requirements.txt --repo D:\\projects\\my_app\n"
+               "  susu --task tasks/TASK-001\n",
+    )
+    parser.add_argument(
+        "positional_prompt",
+        nargs="?",
+        help="Mô tả task tự nhiên (ví dụ: susu \"Thêm hàm multiply vào utils.py\")",
+    )
+    parser.add_argument(
+        "-f",
+        "--file",
+        dest="prompt_file",
+        help="Đọc mô tả task từ file (ví dụ: susu -f task.md hoặc susu -f prompt.txt)",
+    )
+    parser.add_argument(
+        "--prompt",
+        "--task-desc",
+        dest="flag_prompt",
+        help="Mô tả task tự nhiên (tương đương với việc truyền chuỗi trực tiếp)",
+    )
+    parser.add_argument(
+        "--task",
+        dest="task",
+        help="Thư mục task đã có sẵn plan.md và task.json (vd: tasks/TASK-001)",
+    )
+    parser.add_argument(
+        "--repo",
+        default=".",
+        help="Đường dẫn tới git repo đích (mặc định: thư mục hiện tại '.')",
+    )
+    parser.add_argument("--task-id", help="Mã task (tự sinh nếu không truyền khi dùng prompt)")
+    parser.add_argument("--base-branch", default="main", help="Branch gốc để tạo nhánh agent/ (mặc định: main)")
+    parser.add_argument("--timeout", type=int, default=1800, help="Timeout cho mỗi lần gọi agy (giây, mặc định: 1800)")
     args = parser.parse_args()
 
-    project_root = pathlib.Path(__file__).resolve().parent.parent
-    task_dir = pathlib.Path(args.task).resolve()
-    repo_path = pathlib.Path(args.repo).resolve()
-    logs_dir = project_root / "logs"
+    user_prompt = None
+    if args.prompt_file:
+        p_file = pathlib.Path(args.prompt_file).resolve()
+        if not p_file.exists():
+            print(f"ERROR: Không tìm thấy file mô tả task '{p_file}'.")
+            return 1
+        user_prompt = p_file.read_text(encoding="utf-8").strip()
+    else:
+        user_prompt = args.flag_prompt or args.positional_prompt
+
+    if not user_prompt and not args.task:
+        parser.error(
+            "Vui lòng cung cấp mô tả task (ví dụ: susu \"Thêm hàm X vào utils.py\"), "
+            "hoặc dùng file với -f <file.md>, hoặc chỉ định thư mục task bằng --task <thư_mục>."
+        )
+
+    # Quản lý thư mục lưu trữ tập trung tại ~/.susu để không làm bẩn repo của người dùng
+    susu_home = pathlib.Path.home() / ".susu"
+    logs_dir = susu_home / "logs"
+    tasks_dir = susu_home / "tasks"
     logs_dir.mkdir(parents=True, exist_ok=True)
+    tasks_dir.mkdir(parents=True, exist_ok=True)
+
+    repo_path = pathlib.Path(args.repo).resolve()
+    if not repo_path.exists():
+        print(f"ERROR: Thư mục repo '{repo_path}' không tồn tại.")
+        return 1
+
+    # 1. Self-test agy MỘT LẦN khi khởi động
+    print("=" * 60)
+    print("AGY SELF-TEST STARTED (dò cách gọi phù hợp với máy này)")
+    mode = agy_worker.self_test(repo_path, logs_dir)
+    print(f"AGY SELF-TEST RESULT: mode={mode}")
+    print("=" * 60)
+
+    if mode == "unrecoverable":
+        print(
+            "ERROR: Không tìm được cách nào lấy output thật từ agy trên máy này. "
+            "Kiểm tra `agy --version` hoặc cài winpty (Windows)."
+        )
+        return 1
+
+    # 2. Xử lý Task: Nếu có prompt, gọi Planner Subagent
+    if user_prompt:
+        generated_id = args.task_id or f"TASK-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        print(f"\n[SUBAGENT 1: PLANNER] Khởi động Planner Subagent cho {generated_id}...")
+        print(f"Yêu cầu: {user_prompt}")
+        print(f"Repository: {repo_path}")
+        try:
+            task_dir = planner.run_planner(
+                user_prompt=user_prompt,
+                repo_path=repo_path,
+                task_id=generated_id,
+                tasks_dir=tasks_dir,
+                mode=mode,
+                logs_dir=logs_dir,
+            )
+            print(f"[SUBAGENT 1: PLANNER] Đã lập kế hoạch thành công tại: {task_dir}\n")
+        except Exception as exc:
+            print(f"ERROR khi chạy Planner Subagent: {exc}")
+            return 1
+    else:
+        task_dir = pathlib.Path(args.task).resolve()
 
     task = load_task(task_dir)
     task_id = task.get("task_id", task_dir.name)
@@ -125,24 +230,15 @@ def main() -> int:
     logger.section(f"TASK {task_id} CREATED")
     logger.log(f"repo={repo_path}")
     logger.log(f"task_dir={task_dir}")
+    logger.log(f"title={task.get('title', '')}")
 
     try:
         # --- 1. Git branch cô lập ---
-        git_manager.ensure_clean_worktree(repo_path)
+        git_manager.ensure_clean_worktree(repo_path, args.base_branch)
         branch = git_manager.create_task_branch(repo_path, task_id, args.base_branch)
         logger.log(f"BRANCH CREATED: {branch}")
 
-        # --- 2. Self-test agy MỘT LẦN, cache mode cho toàn bộ lần chạy ---
-        logger.log("AGY SELF-TEST STARTED (dò cách gọi phù hợp với máy này)")
-        mode = agy_worker.self_test(repo_path, logs_dir)
-        logger.log(f"AGY SELF-TEST RESULT: mode={mode}")
-        if mode == "unrecoverable":
-            logger.log(
-                "Không tìm được cách nào lấy output thật từ agy trên máy này. "
-                "Kiểm tra `agy --version` hoặc cài winpty (Windows)."
-            )
-            logger.section(f"TASK {task_id} FAILED")
-            return 1
+        logger.log(f"AGY MODE: {mode}")
 
         initial_prompt = build_initial_prompt(task)
         current_prompt = initial_prompt
