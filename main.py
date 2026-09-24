@@ -51,6 +51,33 @@ if sys.platform == "win32":
 MAX_ATTEMPTS = 2  # hardcode có chủ đích — xem lý do trong README
 
 
+def load_project_config(repo_path: pathlib.Path) -> dict:
+    """Nạp cấu hình riêng của project từ .susu.json hoặc .susu.yaml (nếu có)."""
+    json_cfg = repo_path / ".susu.json"
+    if json_cfg.is_file():
+        try:
+            return json.loads(json_cfg.read_text(encoding="utf-8"))
+        except Exception as e:
+            print(f"[WARN] Không đọc được file .susu.json: {e}")
+    yaml_cfg = repo_path / ".susu.yaml"
+    if yaml_cfg.is_file():
+        try:
+            import yaml
+            return yaml.safe_load(yaml_cfg.read_text(encoding="utf-8")) or {}
+        except ImportError:
+            # Fallback đọc key: value đơn giản nếu chưa cài pyyaml
+            cfg = {}
+            for line in yaml_cfg.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line and not line.startswith("#") and ":" in line:
+                    k, v = line.split(":", 1)
+                    cfg[k.strip()] = v.strip().strip('"').strip("'")
+            return cfg
+        except Exception as e:
+            print(f"[WARN] Không đọc được file .susu.yaml: {e}")
+    return {}
+
+
 def load_task(task_dir: pathlib.Path) -> dict:
     task_json_path = task_dir / "task.json"
     plan_md_path = task_dir / "plan.md"
@@ -154,10 +181,43 @@ def main() -> int:
         default=".",
         help="Đường dẫn tới git repo đích (mặc định: thư mục hiện tại '.')",
     )
+    parser.add_argument(
+        "--rollback",
+        dest="rollback_task_id",
+        help="Huỷ bỏ nhanh branch của một task và khôi phục về branch gốc (ví dụ: susu --rollback TASK-001)",
+    )
+    parser.add_argument(
+        "--force",
+        "-y",
+        "--yes",
+        dest="force",
+        action="store_true",
+        help="Bỏ qua cảnh báo xác nhận khi gặp task rủi ro cao (HIGH RISK)",
+    )
     parser.add_argument("--task-id", help="Mã task (tự sinh nếu không truyền khi dùng prompt)")
-    parser.add_argument("--base-branch", default="main", help="Branch gốc để tạo nhánh agent/ (mặc định: main)")
-    parser.add_argument("--timeout", type=int, default=1800, help="Timeout cho mỗi lần gọi agy (giây, mặc định: 1800)")
+    parser.add_argument("--base-branch", default=None, help="Branch gốc để tạo nhánh agent/ (mặc định: main)")
+    parser.add_argument("--timeout", type=int, default=None, help="Timeout cho mỗi lần gọi agy (giây, mặc định: 1800)")
     args = parser.parse_args()
+
+    repo_path = pathlib.Path(args.repo).resolve()
+    if not repo_path.exists():
+        print(f"ERROR: Thư mục repo '{repo_path}' không tồn tại.")
+        return 1
+
+    # Nạp cấu hình riêng của project từ .susu.json hoặc .susu.yaml (nếu có)
+    project_config = load_project_config(repo_path)
+    base_branch = args.base_branch or project_config.get("base_branch", "main")
+    task_timeout = args.timeout or project_config.get("timeout", 1800)
+
+    # 0. Xử lý lệnh Rollback nếu được gọi
+    if args.rollback_task_id:
+        try:
+            msg = git_manager.rollback_task(repo_path, args.rollback_task_id, base_branch)
+            print(f"[ROLLBACK] {msg}")
+            return 0
+        except Exception as exc:
+            print(f"ERROR: {exc}")
+            return 1
 
     user_prompt = None
     if args.prompt_file:
@@ -181,11 +241,6 @@ def main() -> int:
     tasks_dir = susu_home / "tasks"
     logs_dir.mkdir(parents=True, exist_ok=True)
     tasks_dir.mkdir(parents=True, exist_ok=True)
-
-    repo_path = pathlib.Path(args.repo).resolve()
-    if not repo_path.exists():
-        print(f"ERROR: Thư mục repo '{repo_path}' không tồn tại.")
-        return 1
 
     # 1. Self-test agy MỘT LẦN khi khởi động
     print("=" * 60)
@@ -226,16 +281,38 @@ def main() -> int:
     task = load_task(task_dir)
     task_id = task.get("task_id", task_dir.name)
 
+    # 3. Phân loại và cảnh báo mức độ rủi ro (Risk Classification)
+    risk_level = task.get("risk_level", "LOW").upper()
+    risk_reasons = task.get("risk_reasons", [])
+    if risk_level == "HIGH":
+        print("\n" + "!" * 60)
+        print("⚠️  CẢNH BÁO AN TOÀN: Task này được xếp loại RỦI RO CAO (HIGH RISK)!")
+        if risk_reasons:
+            print("Lý do cảnh báo:")
+            for r in risk_reasons:
+                print(f"  • {r}")
+        print("!" * 60 + "\n")
+        if not args.force and sys.stdin.isatty():
+            try:
+                ans = input("Bạn có muốn tiếp tục cho Agent triển khai không? [y/N]: ").strip().lower()
+                if ans not in ("y", "yes"):
+                    print("Đã huỷ bỏ triển khai task theo yêu cầu người dùng.")
+                    return 0
+            except (EOFError, KeyboardInterrupt):
+                print("\nĐã huỷ bỏ triển khai task.")
+                return 0
+
     logger = TaskLogger(task_id, logs_dir)
     logger.section(f"TASK {task_id} CREATED")
     logger.log(f"repo={repo_path}")
     logger.log(f"task_dir={task_dir}")
     logger.log(f"title={task.get('title', '')}")
+    logger.log(f"risk_level={risk_level}")
 
     try:
         # --- 1. Git branch cô lập ---
-        git_manager.ensure_clean_worktree(repo_path, args.base_branch)
-        branch = git_manager.create_task_branch(repo_path, task_id, args.base_branch)
+        git_manager.ensure_clean_worktree(repo_path, base_branch)
+        branch = git_manager.create_task_branch(repo_path, task_id, base_branch)
         logger.log(f"BRANCH CREATED: {branch}")
 
         logger.log(f"AGY MODE: {mode}")
@@ -255,7 +332,7 @@ def main() -> int:
                 task_id=task_id,
                 mode=mode,
                 attempt=attempt,
-                timeout_seconds=args.timeout,
+                timeout_seconds=task_timeout,
             )
 
             if not agy_result.ok:
@@ -279,9 +356,24 @@ def main() -> int:
                 logger.section(f"TASK {task_id} FAILED")
                 return 1
 
+            # --- 2.5. Kiểm tra an toàn: Protected Paths & Diff Size Guard ---
+            try:
+                git_manager.check_protected_paths(repo_path, project_config.get("protected_paths"))
+                max_lines = project_config.get("max_diff_lines", 1000)
+                max_files = project_config.get("max_files_changed", 30)
+                files_cnt, lines_cnt = git_manager.check_diff_size(repo_path, max_lines, max_files)
+                logger.log(f"SAFETY CHECK PASSED: {files_cnt} files, {lines_cnt} lines changed.")
+            except (git_manager.GitSecurityError, git_manager.DiffSizeLimitError) as sec_exc:
+                logger.log(f"SECURITY/GUARD ALERT: {sec_exc}")
+                logger.log("Tự động khôi phục working tree về trạng thái sạch (reset hard)...")
+                git_manager.reset_hard(repo_path)
+                logger.section(f"TASK {task_id} FAILED (Bị chặn bởi Safety Guard)")
+                return 1
+
             # --- 3. Orchestrator tự verify, không tin agy tự báo cáo ---
             logger.log("TEST STARTED")
-            test_result = test_runner.run_tests(task.get("test_commands", []), repo_path)
+            test_commands = project_config.get("test_commands") or task.get("test_commands", [])
+            test_result = test_runner.run_tests(test_commands, repo_path)
 
             if test_result.passed:
                 logger.log("TEST PASSED")

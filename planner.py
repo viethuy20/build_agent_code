@@ -66,6 +66,10 @@ FILE 1: `{task_dir_str}/task.json`
   ],
   "test_commands": [
     "Lệnh test chính xác để verify, ví dụ: python -m unittest discover hoặc pytest"
+  ],
+  "risk_level": "LOW",
+  "risk_reasons": [
+    "Lý do đánh giá rủi ro (đánh giá HIGH nếu thay đổi auth, db migration, xóa dữ liệu, bảo mật)"
   ]
 }}
 
@@ -229,7 +233,9 @@ def run_planner(
             "description": user_prompt,
             "requirements": [user_prompt],
             "acceptance_criteria": ["Test pass"],
-            "test_commands": ["pytest -q"],
+            "test_commands": ["python -m unittest discover"],
+            "risk_level": "LOW",
+            "risk_reasons": [],
         }
         task_json_path.write_text(json.dumps(fallback_task, indent=2, ensure_ascii=False), encoding="utf-8")
 
