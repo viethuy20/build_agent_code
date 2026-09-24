@@ -1,7 +1,7 @@
 # Susu — Multi-Agent AI Software Engineering CLI (v0.4)
 
-Hệ thống Agentic tự động hóa hoàn toàn quy trình phát triển phần mềm với lớp phòng vệ an toàn nhiều tầng:
-**User Prompt / File Task → Planner Subagent (khảo sát & lập plan) → Coder Subagent (thực thi) → Safety Guards (Protected Paths & Diff Size) → Tester Verifier (kiểm thử & tự sửa lỗi) → Auto Git Commit**
+Hệ thống Agentic tự động hóa quy trình phát triển phần mềm với lớp phòng vệ an toàn nhiều tầng:
+**User Prompt / File Task → Planner Subagent (khảo sát & lập plan) → Coder Subagent (thực thi) → Safety Guards (Protected Paths & Diff Size) → Tester Verifier (kiểm thử & tự sửa lỗi) → Human Review (giữ code trên branch để bạn tự kiểm tra, hoặc tuỳ chọn --auto-commit)**
 
 ---
 
@@ -13,22 +13,27 @@ Hệ thống Agentic tự động hóa hoàn toàn quy trình phát triển ph�
    - Tự động khởi tạo `git init` và commit ban đầu nếu thư mục project mới chưa có Git.
    - Toàn bộ lịch sử task, kế hoạch và log được lưu trữ tập trung tại `~/.susu/` (`C:\Users\tranv\.susu/`), giữ cho repo dự án của bạn luôn sạch sẽ 100%.
 
-2. **Chế độ Full-Auto & Phân loại rủi ro (Risk Classification):**
+2. **Chế độ Review mặc định — Giữ toàn quyền kiểm soát code:**
+   - Mặc định hệ thống **KHÔNG tự động commit hay push** code sau khi test pass.
+   - Toàn bộ code thay đổi được giữ nguyên vẹn trên nhánh `agent/<task_id>`. Bạn có thể thoải mái xem lại thay đổi bằng `git diff` / `git status`, sau đó tự quyết định commit hoặc rollback (`susu --rollback <task_id>`).
+   - Nếu bạn muốn tự động commit, chỉ cần thêm cờ `--auto-commit` khi chạy lệnh hoặc cấu hình `"auto_commit": true` trong `.susu.json`.
+
+3. **Chế độ Full-Auto & Phân loại rủi ro (Risk Classification):**
    - **Subagent 1 (Planner):** Tự động đọc repository đích, phân tích convention và test framework (`unittest`, `pytest`...), sau đó tự sinh `task.json` + `plan.md`.
    - **Phân loại rủi ro:** Planner tự động đánh giá mức độ rủi ro của task (`LOW`, `MEDIUM`, `HIGH`). Nếu task có rủi ro cao (đụng đến schema DB, auth, credentials, bảo mật), hệ thống sẽ cảnh báo chi tiết trước khi triển khai.
    - **Subagent 2 (Coder):** Tiếp nhận kế hoạch và trực tiếp viết code trên branch Git riêng biệt (`agent/<task_id>`).
    - **Tester Verifier (Nguyên tắc "Không tin Agent tự báo cáo"):** Tự động chạy lại bộ test độc lập. Nếu test fail do code sai, tự động gom log lỗi và yêu cầu Coder sửa lại (Self-Correction feedback loop, tối đa 2 lần thử).
 
-3. **Lớp phòng vệ an toàn đa tầng (Safety Guards):**
+4. **Lớp phòng vệ an toàn đa tầng (Safety Guards):**
    - **Protected Paths Guard:** Chặn cứng và huỷ ngay lập tức nếu Agent cố tình sửa hoặc tạo mới các file nhạy cảm (`.env*`, `*.pem`, `*.key`, `*secret*`, `*credential*`, `.git/*`).
    - **Diff Size Guard:** Chặn đứng Agent nếu số dòng sửa đổi hoặc số file thay đổi vượt quá ngưỡng an toàn (mặc định tối đa 1000 dòng, 30 file), chống tình trạng Agent đi lạc hướng hoặc viết lại cả project.
    - Khi vi phạm bất kỳ lớp bảo vệ nào, hệ thống tự động `reset hard` về trạng thái sạch, tuyệt đối không commit code rác.
 
-4. **Lệnh Rollback tức thì (`susu --rollback <task_id>`):**
+5. **Lệnh Rollback tức thì (`susu --rollback <task_id>`):**
    - Cho phép người dùng huỷ bỏ nhanh chóng branch của một task và khôi phục working tree về branch gốc chỉ với 1 câu lệnh.
 
-5. **Cấu hình linh hoạt theo từng dự án (`.susu.json` / `.susu.yaml`):**
-   - Hỗ trợ file `.susu.json` đặt tại thư mục gốc của project để cấu hình lệnh test riêng, base branch riêng, danh sách protected paths bổ sung và ngưỡng diff.
+6. **Cấu hình linh hoạt theo từng dự án (`.susu.json` / `.susu.yaml`):**
+   - Hỗ trợ file `.susu.json` đặt tại thư mục gốc của project để cấu hình lệnh test riêng, base branch riêng, danh sách protected paths bổ sung, ngưỡng diff và bật tắt `auto_commit`.
 
 ---
 
@@ -72,6 +77,7 @@ susu --task tasks/TASK-001
 ```
 
 ### Các tùy chọn bổ sung:
+- `--auto-commit`: Tự động commit code khi test PASS (mặc định tắt để bạn tự review code).
 - `--rollback <task_id>`: Huỷ bỏ branch của một task và khôi phục về branch gốc.
 - `--force`, `-y`, `--yes`: Bỏ qua cảnh báo xác nhận khi gặp task rủi ro cao (HIGH RISK).
 - `--base-branch <branch>`: Chọn branch gốc để phân nhánh (mặc định: `main`).
@@ -87,6 +93,7 @@ Bạn có thể tạo file `.susu.json` trong thư mục gốc của repo để 
 ```json
 {
   "base_branch": "main",
+  "auto_commit": false,
   "test_commands": [
     "python -m unittest discover tests"
   ],
@@ -105,7 +112,7 @@ Bạn có thể tạo file `.susu.json` trong thư mục gốc của repo để 
 
 ## 📊 Kết quả đầu ra
 
-- **Mã nguồn:** Tự động commit trên branch `agent/<task_id>` của repo đích sau khi toàn bộ test PASS.
+- **Mã nguồn:** Giữ nguyên các thay đổi trên branch `agent/<task_id>` của repo đích sau khi toàn bộ test PASS để bạn tự review (`git diff` / `git status`). Nếu muốn tự động commit, chỉ cần thêm cờ `--auto-commit`.
 - **Kế hoạch & Dữ liệu task:** Được lưu tại `~/.susu/tasks/<task_id>/`:
   - `task.json`: Dữ liệu có cấu trúc mô tả yêu cầu, tiêu chí nghiệm thu, lệnh test và đánh giá rủi ro.
   - `plan.md`: Bản kế hoạch chi tiết từng bước do Planner Subagent lập ra.

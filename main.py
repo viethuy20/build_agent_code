@@ -194,6 +194,12 @@ def main() -> int:
         action="store_true",
         help="Bỏ qua cảnh báo xác nhận khi gặp task rủi ro cao (HIGH RISK)",
     )
+    parser.add_argument(
+        "--auto-commit",
+        dest="auto_commit",
+        action="store_true",
+        help="Tự động commit khi test PASS (mặc định: tắt để bạn tự review code)",
+    )
     parser.add_argument("--task-id", help="Mã task (tự sinh nếu không truyền khi dùng prompt)")
     parser.add_argument("--base-branch", default=None, help="Branch gốc để tạo nhánh agent/ (mặc định: main)")
     parser.add_argument("--timeout", type=int, default=None, help="Timeout cho mỗi lần gọi agy (giây, mặc định: 1800)")
@@ -208,6 +214,7 @@ def main() -> int:
     project_config = load_project_config(repo_path)
     base_branch = args.base_branch or project_config.get("base_branch", "main")
     task_timeout = args.timeout or project_config.get("timeout", 1800)
+    auto_commit = args.auto_commit or project_config.get("auto_commit", False)
 
     # 0. Xử lý lệnh Rollback nếu được gọi
     if args.rollback_task_id:
@@ -377,10 +384,18 @@ def main() -> int:
 
             if test_result.passed:
                 logger.log("TEST PASSED")
-                commit_message = f"[agent] {task_id} (attempt {attempt}): {task.get('title', '')}"
-                commit_hash = git_manager.commit_all(repo_path, commit_message)
-                logger.log(f"COMMIT CREATED: {commit_hash}")
-                logger.section(f"TASK {task_id} COMPLETED (attempt {attempt})")
+                if auto_commit:
+                    commit_message = f"[agent] {task_id} (attempt {attempt}): {task.get('title', '')}"
+                    commit_hash = git_manager.commit_all(repo_path, commit_message)
+                    logger.log(f"COMMIT CREATED: {commit_hash}")
+                    logger.section(f"TASK {task_id} COMPLETED (attempt {attempt})")
+                else:
+                    logger.log("CHẾ ĐỘ REVIEW: Không tự động commit để bạn tự kiểm tra code.")
+                    logger.log(f"Code đã sẵn sàng trên branch '{branch}'.")
+                    logger.log("Bạn có thể kiểm tra qua: git diff / git status")
+                    logger.log(f"Nếu đồng ý, commit bằng: git add -A && git commit -m '[agent] {task_id}: {task.get('title', '')}'")
+                    logger.log(f"Nếu muốn huỷ bỏ: susu --rollback {task_id}")
+                    logger.section(f"TASK {task_id} READY FOR REVIEW")
                 return 0
 
             logger.log("TEST FAILED")
