@@ -30,7 +30,9 @@ import argparse
 import datetime
 import json
 import pathlib
+import re
 import sys
+import unicodedata
 
 import agy_worker
 import git_manager
@@ -38,6 +40,49 @@ from logger import TaskLogger
 import planner
 import subagent_roles
 import test_runner
+
+STOP_WORDS = {
+    "va", "vao", "cho", "cua", "de", "la", "cac", "mot", "nhung", "voi", "trong", "tren", "khi", "duoc", "ra",
+    "and", "or", "the", "a", "an", "in", "on", "at", "to", "for", "of", "with", "by", "from",
+}
+
+
+def slugify_text(text: str, max_words: int = 5, max_length: int = 38) -> str:
+    """Tạo slug ngắn gọn, dễ đọc, an toàn cho Git branch từ prompt tiếng Việt hoặc tiếng Anh."""
+    for line in text.strip().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith("#"):
+            text = line.lstrip("#").strip()
+            break
+        else:
+            text = line
+            break
+
+    text = text.replace("đ", "d").replace("Đ", "D")
+    normalized = unicodedata.normalize("NFD", text)
+    ascii_text = "".join(c for c in normalized if unicodedata.category(c) != "Mn")
+    ascii_text = re.sub(r"[^\w\s-]", " ", ascii_text).strip().lower()
+    all_words = [w for w in re.split(r"[\s_]+", ascii_text) if w]
+    filtered_words = [w for w in all_words if w not in STOP_WORDS]
+    words = filtered_words if len(filtered_words) >= 2 else all_words
+    slug = "-".join(words[:max_words])
+    if len(slug) > max_length:
+        slug = slug[:max_length].rstrip("-")
+    return slug or "task"
+
+
+def generate_semantic_task_id(user_prompt: str, tasks_dir: pathlib.Path | None = None) -> str:
+    """Tạo task_id có ngữ nghĩa từ nội dung prompt, ví dụ: TASK-20260925-them-ham-format-currency."""
+    now_date = datetime.datetime.now().strftime("%Y%m%d")
+    now_time = datetime.datetime.now().strftime("%H%M")
+    slug = slugify_text(user_prompt)
+    candidate = f"TASK-{now_date}-{slug}"
+    # Nếu task trùng tên đã tồn tại trong ngày, thêm giờ phút để đảm bảo tính duy nhất
+    if tasks_dir and (tasks_dir / candidate).exists():
+        return f"TASK-{now_date}-{now_time}-{slug}"
+    return candidate
 
 # Đảm bảo in tiếng Việt trên console Windows không bị UnicodeEncodeError
 if sys.platform == "win32":
@@ -300,10 +345,11 @@ def main() -> int:
 
     # 2. Xử lý Task: Nếu có prompt, gọi Planner Subagent
     if user_prompt:
-        generated_id = args.task_id or f"TASK-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        generated_id = args.task_id or generate_semantic_task_id(user_prompt, tasks_dir)
         print("\n" + "=" * 60)
         print(f"[BƯỚC 1: TECH LEAD MANAGER — LẬP KẾ HOẠCH & TUYỂN CHỌN SUBAGENT]")
         print(f"  • Task ID: {generated_id}")
+        print(f"  • Branch dự kiến: agent/{generated_id}")
         print(f"  • Yêu cầu: {user_prompt}")
         print(f"  • Repository: {repo_path}")
         print(f"  • Chuỗi Model Manager ưu tiên: {' -> '.join(planner_models)}")

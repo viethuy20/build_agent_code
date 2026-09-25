@@ -239,7 +239,8 @@ def check_diff_size(
 
 def rollback_task(repo_path: pathlib.Path, task_id: str, base_branch: str = "main") -> str:
     """Huỷ bỏ branch agent/<task_id> và khôi phục về base_branch."""
-    branch_name = f"agent/{task_id}"
+    clean_task_id = task_id[len("agent/"):] if task_id.startswith("agent/") else task_id
+    branch_name = f"agent/{clean_task_id}"
 
     # Kiểm tra xem branch có tồn tại không
     branch_check = _run_git(["branch", "--list", branch_name], repo_path)
