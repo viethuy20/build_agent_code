@@ -43,7 +43,7 @@ import subagent_roles
 import test_runner
 
 VI_EN_PHRASES: list[tuple[str, str]] = [
-    (r"\bth[eê]m\b|\bt[aạ]o\b|\bvi[eế]t\b", "add"),
+    (r"\bth[eê]m\b|\bt[aạ]o\b|\bvi[eế]t\b|\bx[aâ]y d[uự]ng\b", "add"),
     (r"\bs[uử]a\b|\bfix\b|\bv[aá]\b|\bkh[aắ]c ph[uụ]c\b", "fix"),
     (r"\bx[oó]a\b|\bb[oỏ]\b|\blo[aạ]i b[oỏ]\b", "remove"),
     (r"\bt[oố]i [uư]u( h[oó]a)?\b", "optimize"),
@@ -65,6 +65,21 @@ VI_EN_PHRASES: list[tuple[str, str]] = [
     (r"\bt[aà]i li[eệ]u\b", "docs"),
     (r"\bt[iì]m ki[eế]m\b", "search"),
     (r"\bb[oộ] nh[oớ] đ[eệ]m\b", "cache"),
+    (r"\bb[oộ] nh[oớ]\b|\bram\b|\bmemory\b", "memory"),
+    (r"\bđ[oọ]c\b|\bread\b", "read"),
+    (r"\bl[uư]u tr[uữ]\b|\bl[uư]u\b|\bstore\b", "store"),
+    (r"\bgiao d[iị]ch\b|\btransaction\b", "transaction"),
+    (r"\bđ[uư][oờ]ng [oố]ng\b|\bpipeline\b", "pipeline"),
+    (r"\bx[uử] l[yý]\b|\btransform\b", "transform"),
+    (r"\bl[aà]m s[aạ]ch\b|\bclean\b", "clean"),
+    (r"\btr[ií]ch xu[aấ]t\b|\bextract\b", "extract"),
+    (r"\bn[aạ]p\b|\bt[aả]i\b|\bload\b", "load"),
+    (r"\bkho d[uữ] li[eệ]u\b|\bdwh\b|\bwarehouse\b", "dwh"),
+    (r"\bh[oồ] d[uữ] li[eệ]u\b|\blakehouse\b|\bdatalake\b", "lakehouse"),
+    (r"\bch[aấ]t l[uư][oợ]ng d[uữ] li[eệ]u\b|\bdata quality\b", "data-quality"),
+    (r"\bph[aâ]n v[uù]ng\b|\bpartition\b", "partition"),
+    (r"\bch[aạ]y l[aạ]i\b|\bbackfill\b", "backfill"),
+    (r"\bchuy[eể]n đ[oổ]i\b|\bconvert\b", "convert"),
 ]
 
 STOP_WORDS = {

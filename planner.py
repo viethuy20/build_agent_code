@@ -89,12 +89,12 @@ FILE 1: `{task_dir_str}/task.json`
   "title": "Tiêu đề ngắn gọn mô tả task",
   "english_slug": "kebab-case-slug-in-english (chuẩn tiếng Anh ngắn gọn 3-5 từ, ví dụ: add-format-currency-utils, optimize-database-query, fix-auth-token-bug)",
   "description": "Mô tả chi tiết mục tiêu cần đạt được",
-  "task_type": "backend | frontend | bugfix | refactor | testing | general",
+  "task_type": "data_engineering | backend | frontend | bugfix | refactor | testing | general",
   "relevant_skills": [
     "tên các skill được trang bị cho subagent từ danh sách [{skills_list_str}]"
   ],
   "assigned_subagent": {{
-    "role": "backend_specialist | frontend_specialist | senior_debugger | refactor_architect | test_engineer | general_coder",
+    "role": "data_engineer | backend_specialist | frontend_specialist | senior_debugger | refactor_architect | test_engineer | general_coder",
     "recommended_model": "gemini-3.8-flash-medium | claude-sonnet-4-6",
     "reason": "Lý do Manager chọn subagent và model này",
     "focus_instructions": "Chỉ đạo cụ thể của Manager gửi riêng cho Subagent này khi thực hiện"

@@ -6,6 +6,19 @@
 from typing import Any
 
 SUBAGENT_ROLES: dict[str, dict[str, Any]] = {
+    "data_engineer": {
+        "title": "Data Engineer & Pipeline Specialist Subagent",
+        "description": "Chuyên gia kỹ thuật dữ liệu, ETL/ELT pipelines, batch/stream processing, data quality và tối ưu hóa xử lý dữ liệu lớn",
+        "default_model": "gemini-3.8-flash-medium",
+        "guidelines": [
+            "Đảm bảo tính Idempotent: chạy lại nhiều lần với cùng input không gây trùng lặp hay sai lệch dữ liệu (dùng UPSERT/MERGE, staging hoặc partition overwrite).",
+            "Tối ưu bộ nhớ (Memory Efficiency & Out-of-Core): tránh nạp toàn bộ file lớn vào RAM; ưu tiên chunking, streaming, lazy evaluation (Polars LazyFrame, DuckDB, generator).",
+            "Định dạng & Lưu trữ Columnar: ưu tiên Parquet, Arrow, Delta Lake thay vì CSV/JSON để tối ưu tốc độ I/O và dung lượng lưu trữ.",
+            "Data Quality & Validation: tích hợp kiểm tra schema, null, duplicate, boundary constraints (Pandera, Pydantic, dbt test) trước khi nạp vào target.",
+            "Dead Letter Queue (DLQ): cô lập các bản ghi lỗi sang quarantine/bad-records table để không làm sập toàn bộ batch pipeline; ghi log chi tiết.",
+            "Tối ưu truy vấn SQL phân tích: tránh SELECT *, tận dụng Partition Pruning, Window Functions, CTEs và phân tích EXPLAIN query plan.",
+        ],
+    },
     "backend_specialist": {
         "title": "Backend Specialist Subagent",
         "description": "Chuyên gia phát triển Backend, API, Cơ sở dữ liệu và Xử lý dữ liệu",

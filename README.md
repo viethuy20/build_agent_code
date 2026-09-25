@@ -15,6 +15,7 @@ Hệ thống Agentic tự động hóa quy trình phát triển phần mềm the
      - Gửi chỉ đạo trọng tâm (Manager Focus Directive) trực tiếp cho Subagent thực thi.
 
 2. **Kho Subagent chuyên trách (Specialized Worker Roles):**
+   - **`data_engineer`**: **Chuyên gia Kỹ thuật Dữ liệu (Data Engineering)**, ETL/ELT pipelines, tối ưu hoá xử lý dữ liệu lớn (Big Data / Streaming / Batch), Data Quality, Idempotency, Schema Contracts, Out-of-core & Columnar storage.
    - **`backend_specialist`**: Chuyên gia Backend, API RESTful, Database, Type Hints, Thread-safety & Async I/O.
    - **`frontend_specialist`**: Chuyên gia Giao diện người dùng, UI/UX, Semantic HTML, Modern CSS, Responsive & Micro-interactions.
    - **`senior_debugger`**: Chuyên gia điều tra lỗi sâu (Root Cause Analysis), vá lỗi an toàn, bảo mật & chống regression (Ưu tiên model: `claude-sonnet-4-6`).
@@ -25,13 +26,19 @@ Hệ thống Agentic tự động hóa quy trình phát triển phần mềm the
 3. **Hệ thống 3 Tầng Tri thức (Càng làm càng thông minh):**
    - **Tầng 1 — Project Memory (Tích lũy kinh nghiệm tự động):** Sau mỗi task hoàn thành thành công, hệ thống tự động đúc kết các bài học kiến trúc, convention và gotchas vào `~/.susu/memory/<repo_name>.md`. Khi chạy task mới, Manager và Subagent tự động nạp lại kinh nghiệm này, không bao giờ lặp lại lỗi cũ.
    - **Tầng 2 — Thư viện Kỹ năng chuyên sâu (Skills Library):** Tích hợp sẵn cẩm nang kỹ thuật thực chiến trong `skills/`:
-     - `api-design`: Chuẩn hóa RESTful API, status codes, DTO validation, phân trang.
-     - `testing-best-practices`: Chiến lược AAA, Mocking/Fixtures, isolation, kiểm thử giá trị biên.
-     - `db-optimization`: Eager loading chống N+1 query, Indexing, Transaction boundaries, an toàn connection pool.
-     - `frontend-ui`: Semantic HTML5, CSS tokens, responsive layout, micro-interactions, a11y.
-     - `clean-code-refactor`: SOLID principles, bảo tồn 100% backward compatibility, minimal invasive.
+     - **Chuyên sâu Data Engineering:**
+       - `etl-pipeline-design`: Chuẩn hoá ETL/ELT, Idempotency (UPSERT/Partition overwrite), Medallion Architecture (Bronze-Silver-Gold), Atomic file writes, Retry logic.
+       - `data-quality-validation`: Schema Contracts, Pandera, Pydantic, Validation gates (null, duplicate, range checks), Dead Letter Queue (DLQ / Quarantine).
+       - `bigdata-memory-optimization`: Xử lý Out-of-Core, Chunking & Streaming, Polars LazyFrame, DuckDB, Columnar Parquet/Arrow, Snappy/ZSTD compression.
+       - `sql-analytics-dbt`: Dimensional Modeling (Star/Snowflake Schema, SCD 1 & 2), dbt patterns (staging, intermediate, marts), Window Functions, EXPLAIN query plan.
+     - **Kỹ thuật Phần mềm & Toàn diện:**
+       - `api-design`: Chuẩn hóa RESTful API, status codes, DTO validation, phân trang.
+       - `db-optimization`: Eager loading chống N+1 query, Indexing, Transaction boundaries, connection pool.
+       - `testing-best-practices`: Chiến lược AAA, Mocking/Fixtures, isolation, kiểm thử giá trị biên.
+       - `frontend-ui`: Semantic HTML5, CSS tokens, responsive layout, micro-interactions, a11y.
+       - `clean-code-refactor`: SOLID principles, bảo tồn 100% backward compatibility, minimal invasive.
      Manager tự động tuyển chọn và nạp kỹ năng tương ứng cho Subagent khi nhận task.
-   - **Tầng 3 — Quét tài liệu kiến trúc dự án / NotebookLM export (Project Docs):** Tự động phát hiện và hấp thụ tài liệu kiến trúc có sẵn trong repo (`ARCHITECTURE.md`, `SCHEMA.md`, `docs/*.md`) để hiểu sâu nghiệp vụ cốt lõi.
+   - **Tầng 3 — Quét tài liệu kiến trúc dự án / NotebookLM export (Project Docs):** Tự động phát hiện và hấp thụ tài liệu kiến trúc có sẵn trong repo (`ARCHITECTURE.md`, `SCHEMA.md`, `docs/*.md`, `knowledge/*.md`) để hiểu sâu nghiệp vụ cốt lõi.
 
 4. **Chiến lược Model & Cơ chế Fallback thông minh:**
    - **Tech Lead Manager:** Ưu tiên dùng model suy luận mạnh nhất **`claude-opus-4-6-thinking`**. Nếu hết quota/hạn mức hoặc gặp lỗi, hệ thống tự động fallback sang **`claude-sonnet-4-6`**, và phương án dự phòng cuối cùng là **`gemini-3.8-flash-medium`**.
