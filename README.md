@@ -22,25 +22,36 @@ Hệ thống Agentic tự động hóa quy trình phát triển phần mềm the
    - **`test_engineer`**: Kỹ sư QA kiểm thử chuyên sâu, viết test case biên (Edge cases), Isolation, Mocking & Fixtures.
    - **`general_coder`**: Lập trình viên đa năng cho các tác vụ tổng hợp hoặc CRUD thông dụng.
 
-3. **Chiến lược Model & Cơ chế Fallback thông minh:**
+3. **Hệ thống 3 Tầng Tri thức (Càng làm càng thông minh):**
+   - **Tầng 1 — Project Memory (Tích lũy kinh nghiệm tự động):** Sau mỗi task hoàn thành thành công, hệ thống tự động đúc kết các bài học kiến trúc, convention và gotchas vào `~/.susu/memory/<repo_name>.md`. Khi chạy task mới, Manager và Subagent tự động nạp lại kinh nghiệm này, không bao giờ lặp lại lỗi cũ.
+   - **Tầng 2 — Thư viện Kỹ năng chuyên sâu (Skills Library):** Tích hợp sẵn cẩm nang kỹ thuật thực chiến trong `skills/`:
+     - `api-design`: Chuẩn hóa RESTful API, status codes, DTO validation, phân trang.
+     - `testing-best-practices`: Chiến lược AAA, Mocking/Fixtures, isolation, kiểm thử giá trị biên.
+     - `db-optimization`: Eager loading chống N+1 query, Indexing, Transaction boundaries, an toàn connection pool.
+     - `frontend-ui`: Semantic HTML5, CSS tokens, responsive layout, micro-interactions, a11y.
+     - `clean-code-refactor`: SOLID principles, bảo tồn 100% backward compatibility, minimal invasive.
+     Manager tự động tuyển chọn và nạp kỹ năng tương ứng cho Subagent khi nhận task.
+   - **Tầng 3 — Quét tài liệu kiến trúc dự án / NotebookLM export (Project Docs):** Tự động phát hiện và hấp thụ tài liệu kiến trúc có sẵn trong repo (`ARCHITECTURE.md`, `SCHEMA.md`, `docs/*.md`) để hiểu sâu nghiệp vụ cốt lõi.
+
+4. **Chiến lược Model & Cơ chế Fallback thông minh:**
    - **Tech Lead Manager:** Ưu tiên dùng model suy luận mạnh nhất **`claude-opus-4-6-thinking`**. Nếu hết quota/hạn mức hoặc gặp lỗi, hệ thống tự động fallback sang **`claude-sonnet-4-6`**, và phương án dự phòng cuối cùng là **`gemini-3.8-flash-medium`**.
    - **Specialized Subagent:** Mặc định sử dụng **`gemini-3.8-flash-medium`** (hoặc `claude-sonnet-4-6` khi gặp task fix bug/kiến trúc khó do Manager chỉ định).
    - Cho phép ghi đè linh hoạt bằng cờ CLI (`--coder-model`, `--planner-models`) hoặc cấu hình trong `.susu.json`.
 
-4. **Chế độ Review mặc định — Giữ toàn quyền kiểm soát code:**
+5. **Chế độ Review mặc định — Giữ toàn quyền kiểm soát code:**
    - Mặc định hệ thống **KHÔNG tự động commit hay push** code sau khi test pass.
    - Toàn bộ code thay đổi được giữ nguyên vẹn trên nhánh `agent/<task_id>`. Bạn có thể thoải mái xem lại thay đổi bằng `git diff` / `git status`, sau đó tự quyết định commit hoặc rollback (`susu --rollback <task_id>`).
    - Nếu bạn muốn tự động commit, chỉ cần thêm cờ `--auto-commit` khi chạy lệnh hoặc cấu hình `"auto_commit": true` trong `.susu.json`.
 
-5. **Lớp phòng vệ an toàn đa tầng (Safety Guards):**
+6. **Lớp phòng vệ an toàn đa tầng (Safety Guards):**
    - **Protected Paths Guard:** Chặn cứng và huỷ ngay lập tức nếu Agent cố tình sửa hoặc tạo mới các file nhạy cảm (`.env*`, `*.pem`, `*.key`, `*secret*`, `*credential*`, `.git/*`).
    - **Diff Size Guard:** Chặn đứng Agent nếu số dòng sửa đổi hoặc số file thay đổi vượt quá ngưỡng an toàn (mặc định tối đa 1000 dòng, 30 file), chống tình trạng Agent đi lạc hướng hoặc viết lại cả project.
    - Khi vi phạm bất kỳ lớp bảo vệ nào, hệ thống tự động `reset hard` về trạng thái sạch, tuyệt đối không commit code rác.
 
-6. **Lệnh Rollback tức thì (`susu --rollback <task_id>`):**
+7. **Lệnh Rollback tức thì (`susu --rollback <task_id>`):**
    - Cho phép người dùng huỷ bỏ nhanh chóng branch của một task và khôi phục working tree về branch gốc chỉ với 1 câu lệnh.
 
-7. **Lệnh CLI toàn cục `susu` (Đã cài đặt sẵn trên máy):**
+8. **Lệnh CLI toàn cục `susu` (Đã cài đặt sẵn trên máy):**
    - Đứng ở bất kỳ project nào, bạn chỉ cần mở terminal và gọi lệnh `susu`.
    - Tự động nhận diện thư mục hiện tại làm repository đích (`--repo .`).
    - Tự động khởi tạo `git init` và commit ban đầu nếu thư mục project mới chưa có Git.

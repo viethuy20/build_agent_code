@@ -36,6 +36,7 @@ import unicodedata
 
 import agy_worker
 import git_manager
+import knowledge_manager
 from logger import TaskLogger
 import planner
 import subagent_roles
@@ -161,7 +162,7 @@ def load_task(task_dir: pathlib.Path) -> dict:
     return task
 
 
-def build_initial_prompt(task: dict) -> str:
+def build_initial_prompt(task: dict, skills_content: str = "", project_memory: str = "") -> str:
     assigned = task.get("assigned_subagent", {})
     role_name = assigned.get("role", "general_coder")
     role_def = subagent_roles.get_role_definition(role_name)
@@ -173,13 +174,16 @@ def build_initial_prompt(task: dict) -> str:
     acceptance = "\n".join(f"- {a}" for a in task.get("acceptance_criteria", []))
     focus_section = f"\n- CHỈ ĐẠO TRỌNG TÂM TỪ MANAGER: {manager_focus}" if manager_focus else ""
 
+    memory_section = f"\n# 🧠 KINH NGHIỆM ĐÃ TÍCH LŨY CỦA DỰ ÁN (PROJECT MEMORY):\n{project_memory}\n" if project_memory else ""
+    skills_section = f"\n# 📚 CẨM NANG KỸ NĂNG CHUYÊN SÂU ĐƯỢC TRANG BỊ:\n{skills_content}\n" if skills_content else ""
+
     return f"""Bạn là {role_title} được Tech Lead / Manager Agent chỉ định thực hiện task này.
 Không cần hỏi lại người dùng — hãy tự đọc repository hiện tại và triển khai
 chính xác theo kế hoạch và tiêu chuẩn kỹ thuật dưới đây.
 
 # VAI TRÒ & NGUYÊN TẮC CHUYÊN MÔN CỦA BẠN ({role_title}):
 {guidelines}{focus_section}
-
+{memory_section}{skills_section}
 # Task: {task.get('title', task.get('task_id'))}
 
 ## Mô tả
@@ -196,7 +200,7 @@ chính xác theo kế hoạch và tiêu chuẩn kỹ thuật dưới đây.
 
 ## Việc bạn cần làm
 1. Đọc code hiện có trong repository để hiểu convention đang dùng.
-2. Tuân thủ nghiêm ngặt nguyên tắc chuyên môn của vai trò {role_title}.
+2. Tuân thủ nghiêm ngặt nguyên tắc chuyên môn của vai trò {role_title} và các Skill được nạp.
 3. Implement đúng theo kế hoạch ở trên, không tự ý mở rộng phạm vi.
 4. Sau khi implement xong, DỪNG LẠI. Không cần tự chạy test hay tự commit
    — phần đó do hệ thống bên ngoài đảm nhiệm.
@@ -415,12 +419,21 @@ def main() -> int:
     else:
         active_coder_model = recommended_model
 
+    # Nạp Kỹ năng (Skills) và Kinh nghiệm dự án (Project Memory)
+    relevant_skills = task.get("relevant_skills", [])
+    skills_content = knowledge_manager.load_selected_skills(relevant_skills)
+    project_memory = knowledge_manager.load_repo_memory(repo_path, susu_home)
+
     print("\n" + "=" * 60)
     print(f"[BƯỚC 2: MANAGER PHÂN CÔNG SUBAGENT THỰC THI]")
     print(f"  • Lập kế hoạch bởi: Tech Lead Manager (Model: [{planned_by}])")
     print(f"  • Subagent được giao việc: {role_title} ({role_name})")
     print(f"  • Chuyên môn: {role_desc}")
     print(f"  • Model Subagent đảm nhiệm: [{active_coder_model}]")
+    if relevant_skills:
+        print(f"  • Kỹ năng được trang bị (Skills): {', '.join(relevant_skills)}")
+    if project_memory:
+        print("  • Tích lũy kinh nghiệm: Đã kết nối với Project Memory")
     if assigned.get("reason"):
         print(f"  • Lý do Manager chọn: {assigned['reason']}")
     if assigned.get("focus_instructions"):
@@ -457,6 +470,8 @@ def main() -> int:
     logger.log(f"planner_model={planned_by}")
     logger.log(f"subagent_role={role_title} ({role_name})")
     logger.log(f"subagent_model={active_coder_model}")
+    if relevant_skills:
+        logger.log(f"equipped_skills={', '.join(relevant_skills)}")
 
     try:
         # --- 1. Git branch cô lập ---
@@ -466,7 +481,11 @@ def main() -> int:
 
         logger.log(f"AGY MODE: {mode}")
 
-        initial_prompt = build_initial_prompt(task)
+        initial_prompt = build_initial_prompt(
+            task=task,
+            skills_content=skills_content,
+            project_memory=project_memory,
+        )
         current_prompt = initial_prompt
         commit_hash = None
 
@@ -528,6 +547,15 @@ def main() -> int:
 
             if test_result.passed:
                 logger.log("TEST PASSED")
+
+                # Tự động đúc kết và cập nhật kinh nghiệm vào Project Memory
+                try:
+                    knowledge_manager.record_task_learnings(repo_path, susu_home, task, changed_files, attempt)
+                    logger.log("PROJECT MEMORY UPDATED")
+                    print("🧠 [KNOWLEDGE UPDATED] Đã đúc kết bài học và cập nhật vào Project Memory!")
+                except Exception as mem_exc:
+                    logger.log(f"WARN: Không thể cập nhật memory: {mem_exc}")
+
                 if auto_commit:
                     commit_message = f"[agent] {task_id} (attempt {attempt}): {task.get('title', '')}"
                     commit_hash = git_manager.commit_all(repo_path, commit_message)

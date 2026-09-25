@@ -13,7 +13,12 @@ setup(
         "test_runner",
         "logger",
         "subagent_roles",
+        "knowledge_manager",
     ],
+    package_data={
+        "": ["skills/*/*.md"],
+    },
+    include_package_data=True,
     python_requires=">=3.10",
     entry_points={
         "console_scripts": [

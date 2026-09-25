@@ -18,6 +18,7 @@ import re
 from typing import Any
 
 import agy_worker
+import knowledge_manager
 
 
 class PlannerError(RuntimeError):
@@ -29,27 +30,48 @@ def build_planner_prompt(
     repo_path: pathlib.Path,
     task_id: str,
     task_dir: pathlib.Path,
+    project_memory: str = "",
+    project_docs: str = "",
+    available_skills: list[str] | None = None,
 ) -> str:
     # Chuẩn hóa đường dẫn tương thích cross-platform
     task_dir_str = str(task_dir.resolve()).replace("\\", "/")
     repo_path_str = str(repo_path.resolve()).replace("\\", "/")
 
+    skills_list_str = ", ".join(available_skills) if available_skills else "N/A"
+
+    memory_section = ""
+    if project_memory:
+        memory_section = f"""
+# 🧠 KINH NGHIỆM ĐÃ TÍCH LŨY TỪ CÁC TASK TRƯỚC (PROJECT MEMORY):
+{project_memory}
+"""
+
+    docs_section = ""
+    if project_docs:
+        docs_section = f"""
+{project_docs}
+"""
+
     return f"""Bạn là Tech Lead & Manager Agent tối cao cho dự án phần mềm này.
 Nhiệm vụ của bạn là:
 1. Khảo sát toàn diện repository đích (cấu trúc code, ngôn ngữ, convention, testing framework).
-2. Phân tích yêu cầu từ người dùng và chia nhỏ thành kế hoạch thực thi rõ ràng, chi tiết.
-3. Đánh giá mức độ rủi ro (risk_level: LOW / MEDIUM / HIGH).
-4. Phân loại tính chất task và QUYẾT ĐỊNH CHỈ ĐỊNH SUBAGENT CHUYÊN TRÁCH (assigned_subagent) phù hợp nhất từ danh sách sau:
-   - `backend_specialist`: Dành cho task Backend, API, Database, Xử lý dữ liệu, Services, Async/Concurrency. (Model khuyến nghị: `gemini-3.8-flash-medium` hoặc `claude-sonnet-4-6` nếu thuật toán/kiến trúc rất phức tạp)
-   - `frontend_specialist`: Dành cho task Giao diện người dùng, Web UI, CSS, Component, Layout, Responsive, HTML. (Model khuyến nghị: `gemini-3.8-flash-medium`)
-   - `senior_debugger`: Dành cho task Điều tra bug khó, lỗi ngoại lệ, phân tích root cause, vá lỗi bảo mật. (Model khuyến nghị: `claude-sonnet-4-6`)
-   - `refactor_architect`: Dành cho task Tái cấu trúc mã nguồn, tối ưu hóa Clean Code, Design Patterns, SOLID. (Model khuyến nghị: `gemini-3.8-flash-medium`)
-   - `test_engineer`: Dành cho task Viết test cases chuyên sâu, mock, coverage, QA. (Model khuyến nghị: `gemini-3.8-flash-medium`)
-   - `general_coder`: Dành cho task lập trình tổng hợp hoặc CRUD cơ bản. (Model khuyến nghị: `gemini-3.8-flash-medium`)
+2. Tận dụng Kinh nghiệm từ các task trước (Project Memory) và Tài liệu kiến trúc dự án (nếu có).
+3. Phân tích yêu cầu từ người dùng và chia nhỏ thành kế hoạch thực thi rõ ràng, chi tiết.
+4. Đánh giá mức độ rủi ro (risk_level: LOW / MEDIUM / HIGH).
+5. Phân loại tính chất task, QUYẾT ĐỊNH CHỈ ĐỊNH SUBAGENT CHUYÊN TRÁCH (assigned_subagent) và CHỌN CÁC KỸ NĂNG CẦN THIẾT (relevant_skills) từ kho kỹ năng:
+   - Kho Kỹ năng khả dụng: [{skills_list_str}]
+   - Danh sách Subagent Roles:
+     • `backend_specialist`: Backend, API, Database, Xử lý dữ liệu, Services, Async/Concurrency.
+     • `frontend_specialist`: Web UI, CSS, Component, Layout, Responsive, HTML, UX.
+     • `senior_debugger`: Bug khó, ngoại lệ, phân tích root cause, vá lỗi bảo mật.
+     • `refactor_architect`: Tái cấu trúc Clean Code, SOLID, Design Patterns.
+     • `test_engineer`: Viết test cases chuyên sâu, mock, coverage, QA.
+     • `general_coder`: Tác vụ tổng hợp hoặc CRUD cơ bản.
 
 # YÊU CẦU TỪ NGƯỜI DÙNG:
 {user_prompt}
-
+{memory_section}{docs_section}
 # THÔNG TIN MÔI TRƯỜNG:
 - Repository đích: {repo_path_str}
 - Task ID: {task_id}
@@ -68,6 +90,9 @@ FILE 1: `{task_dir_str}/task.json`
   "english_slug": "kebab-case-slug-in-english (chuẩn tiếng Anh ngắn gọn 3-5 từ, ví dụ: add-format-currency-utils, optimize-database-query, fix-auth-token-bug)",
   "description": "Mô tả chi tiết mục tiêu cần đạt được",
   "task_type": "backend | frontend | bugfix | refactor | testing | general",
+  "relevant_skills": [
+    "tên các skill được trang bị cho subagent từ danh sách [{skills_list_str}]"
+  ],
   "assigned_subagent": {{
     "role": "backend_specialist | frontend_specialist | senior_debugger | refactor_architect | test_engineer | general_coder",
     "recommended_model": "gemini-3.8-flash-medium | claude-sonnet-4-6",
@@ -94,6 +119,24 @@ FILE 1: `{task_dir_str}/task.json`
 FILE 2: `{task_dir_str}/plan.md`
 Định dạng Markdown:
 # Implementation Plan — {task_id}
+
+## 1. Inspect & Architecture
+(Mô tả các file hiện có liên quan, kinh nghiệm từ task trước và convention cần tuân thủ)
+
+## 2. Manager Directive & Assigned Subagent
+- **Assigned Role:** (Tên role subagent được phân công)
+- **Recommended Model:** (Model được chỉ định)
+- **Equipped Skills:** (Các skill được nạp: ví dụ api-design, testing-best-practices)
+- **Key Focus:** (Trọng tâm kỹ thuật mà Subagent phải chú ý)
+
+## 3. Implementation Steps
+(Từng bước cụ thể: tạo file gì, sửa hàm nào, logic ra sao)
+
+## 4. Test Strategy
+(Các test cases cần viết để đảm bảo đúng tiêu chí nghiệm thu)
+
+## 5. Verification
+(Lệnh test kiểm tra cuối cùng)mplementation Plan — {task_id}
 
 ## 1. Inspect & Architecture
 (Mô tả các file hiện có liên quan và convention cần tuân thủ)
@@ -160,11 +203,24 @@ def run_planner(
     task_dir = (tasks_dir / task_id).resolve()
     task_dir.mkdir(parents=True, exist_ok=True)
 
+    susu_home = tasks_dir.parent
+    project_memory = knowledge_manager.load_repo_memory(repo_path, susu_home)
+    project_docs = knowledge_manager.scan_project_docs(repo_path)
+    available_skills = knowledge_manager.list_available_skills()
+
+    if project_memory:
+        print("🧠 [PROJECT MEMORY] Đã nạp kinh nghiệm tích lũy từ các task trước.")
+    if project_docs:
+        print("📖 [PROJECT DOCS] Đã nạp tài liệu kiến trúc dự án.")
+
     planner_prompt = build_planner_prompt(
         user_prompt=user_prompt,
         repo_path=repo_path,
         task_id=task_id,
         task_dir=task_dir,
+        project_memory=project_memory,
+        project_docs=project_docs,
+        available_skills=available_skills,
     )
 
     timeout_flag = f"{timeout_seconds}s"
