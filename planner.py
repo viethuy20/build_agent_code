@@ -65,6 +65,7 @@ FILE 1: `{task_dir_str}/task.json`
 {{
   "task_id": "{task_id}",
   "title": "Tiêu đề ngắn gọn mô tả task",
+  "english_slug": "kebab-case-slug-in-english (chuẩn tiếng Anh ngắn gọn 3-5 từ, ví dụ: add-format-currency-utils, optimize-database-query, fix-auth-token-bug)",
   "description": "Mô tả chi tiết mục tiêu cần đạt được",
   "task_type": "backend | frontend | bugfix | refactor | testing | general",
   "assigned_subagent": {{

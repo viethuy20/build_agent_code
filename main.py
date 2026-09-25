@@ -41,32 +41,55 @@ import planner
 import subagent_roles
 import test_runner
 
+VI_EN_PHRASES: list[tuple[str, str]] = [
+    (r"\bth[eê]m\b|\bt[aạ]o\b|\bvi[eế]t\b", "add"),
+    (r"\bs[uử]a\b|\bfix\b|\bv[aá]\b|\bkh[aắ]c ph[uụ]c\b", "fix"),
+    (r"\bx[oó]a\b|\bb[oỏ]\b|\blo[aạ]i b[oỏ]\b", "remove"),
+    (r"\bt[oố]i [uư]u( h[oó]a)?\b", "optimize"),
+    (r"\bt[aá]i c[aấ]u tr[uú]c\b|\brefactor\b", "refactor"),
+    (r"\bc[aậ]p nh[aậ]t\b|\bupdate\b", "update"),
+    (r"\bn[aâ]ng c[aấ]p\b|\bupgrade\b", "upgrade"),
+    (r"\bki[eể]m th[uử]\b|\bki[eể]m tra\b|\btest\b", "test"),
+    (r"\bh[aà]m\b|\bph[uư][oơ]ng th[uứ]c\b", "func"),
+    (r"\bch[uứ]c n[aă]ng\b|\bt[ií]nh n[aă]ng\b", "feat"),
+    (r"\bgiao di[eệ]n\b", "ui"),
+    (r"\bl[oỗ]i\b", "bug"),
+    (r"\bthanh to[aá]n\b", "payment"),
+    (r"\bx[aá]c th[uự]c\b|\bph[aâ]n quy[eề]n\b", "auth"),
+    (r"\bng[uư][oờ]i d[uù]ng\b|\bt[aà]i kho[aả]n\b", "user"),
+    (r"\bb[aả]o m[aậ]t\b", "security"),
+    (r"\bc[oơ] s[oở] d[uữ] li[eệ]u\b|\bcsdl\b", "db"),
+    (r"\bd[uữ] li[eệ]u\b", "data"),
+    (r"\bc[aấ]u h[iì]nh\b", "config"),
+    (r"\bt[aà]i li[eệ]u\b", "docs"),
+    (r"\bt[iì]m ki[eế]m\b", "search"),
+    (r"\bb[oộ] nh[oớ] đ[eệ]m\b", "cache"),
+]
+
 STOP_WORDS = {
     "va", "vao", "cho", "cua", "de", "la", "cac", "mot", "nhung", "voi", "trong", "tren", "khi", "duoc", "ra",
+    "lam", "theo", "dung", "bang", "nhu", "lai", "rat", "qua", "co", "nay",
     "and", "or", "the", "a", "an", "in", "on", "at", "to", "for", "of", "with", "by", "from",
 }
 
 
 def slugify_text(text: str, max_words: int = 5, max_length: int = 38) -> str:
-    """Tạo slug ngắn gọn, dễ đọc, an toàn cho Git branch từ prompt tiếng Việt hoặc tiếng Anh."""
+    """Tạo slug chuẩn tiếng Anh ngắn gọn (kebab-case), an toàn cho Git branch."""
     for line in text.strip().splitlines():
         line = line.strip()
         if not line:
             continue
-        if line.startswith("#"):
-            text = line.lstrip("#").strip()
-            break
-        else:
-            text = line
-            break
+        text = line.lstrip("#").strip()
+        break
 
-    text = text.replace("đ", "d").replace("Đ", "D")
-    normalized = unicodedata.normalize("NFD", text)
-    ascii_text = "".join(c for c in normalized if unicodedata.category(c) != "Mn")
-    ascii_text = re.sub(r"[^\w\s-]", " ", ascii_text).strip().lower()
-    all_words = [w for w in re.split(r"[\s_]+", ascii_text) if w]
-    filtered_words = [w for w in all_words if w not in STOP_WORDS]
-    words = filtered_words if len(filtered_words) >= 2 else all_words
+    lower_text = text.lower()
+    for pattern, repl in VI_EN_PHRASES:
+        lower_text = re.sub(pattern, f" {repl} ", lower_text)
+
+    lower_text = lower_text.replace("đ", "d").replace("Đ", "D")
+    norm = "".join(c for c in unicodedata.normalize("NFD", lower_text) if unicodedata.category(c) != "Mn")
+    ascii_clean = re.sub(r"[^\w\s-]", " ", norm).strip().lower()
+    words = [w for w in re.split(r"[\s_]+", ascii_clean) if w and w not in STOP_WORDS]
     slug = "-".join(words[:max_words])
     if len(slug) > max_length:
         slug = slug[:max_length].rstrip("-")
@@ -74,7 +97,7 @@ def slugify_text(text: str, max_words: int = 5, max_length: int = 38) -> str:
 
 
 def generate_semantic_task_id(user_prompt: str, tasks_dir: pathlib.Path | None = None) -> str:
-    """Tạo task_id có ngữ nghĩa từ nội dung prompt, ví dụ: TASK-20260925-them-ham-format-currency."""
+    """Tạo task_id chuẩn tiếng Anh từ nội dung prompt, ví dụ: TASK-20260925-add-func-format-currency."""
     now_date = datetime.datetime.now().strftime("%Y%m%d")
     now_time = datetime.datetime.now().strftime("%H%M")
     slug = slugify_text(user_prompt)
