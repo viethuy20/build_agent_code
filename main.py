@@ -38,6 +38,7 @@ import agy_worker
 import git_manager
 import knowledge_manager
 from logger import TaskLogger
+import notebooklm_bridge
 import planner
 import subagent_roles
 import test_runner
@@ -326,7 +327,23 @@ def main() -> int:
         default=None,
         help="Đường dẫn thư mục kho tri thức, schema, hoặc NotebookLM export (ví dụ: ./knowledge hoặc D:\\notes\\notebooklm)",
     )
+    parser.add_argument(
+        "--notebooklm-login",
+        action="store_true",
+        help="Mở trình duyệt để đăng nhập tài khoản Google vào NotebookLM (1 lần duy nhất)",
+    )
+    parser.add_argument(
+        "--notebook-id",
+        dest="notebook_id",
+        default=None,
+        help="Notebook ID hoặc URL từ Google NotebookLM để truy vấn RAG trực tiếp vào tri thức",
+    )
     args = parser.parse_args()
+
+    # 0.1 Xử lý đăng nhập Google NotebookLM nếu được yêu cầu
+    if args.notebooklm_login:
+        success = notebooklm_bridge.run_login()
+        return 0 if success else 1
 
     repo_path = pathlib.Path(args.repo).resolve()
     if not repo_path.exists():
@@ -361,6 +378,13 @@ def main() -> int:
             extra_knowledge_dirs.extend(cfg_kdirs)
         elif isinstance(cfg_kdirs, str):
             extra_knowledge_dirs.append(cfg_kdirs)
+
+    # Nhận diện Google NotebookLM ID (qua cờ CLI hoặc .susu.json)
+    notebook_id = (
+        args.notebook_id
+        or project_config.get("notebook_id")
+        or (project_config.get("notebooklm", {}).get("notebook_id") if isinstance(project_config.get("notebooklm"), dict) else None)
+    )
 
     # 0. Xử lý lệnh Rollback nếu được gọi
     if args.rollback_task_id:
@@ -431,6 +455,7 @@ def main() -> int:
                 timeout_seconds=600,
                 models=planner_models,
                 extra_knowledge_dirs=extra_knowledge_dirs,
+                notebook_id=notebook_id,
             )
             print(f"\n[BƯỚC 1 HOÀN TẤT] Bản kế hoạch và phân công đã lưu tại: {task_dir}")
         except Exception as exc:
@@ -467,6 +492,8 @@ def main() -> int:
         repo_path=repo_path,
         extra_dirs=extra_knowledge_dirs,
         susu_home=susu_home,
+        notebook_id=notebook_id,
+        user_prompt=user_prompt or task.get("title", ""),
     )
 
     print("\n" + "=" * 60)

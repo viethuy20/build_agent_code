@@ -14,6 +14,7 @@ setup(
         "logger",
         "subagent_roles",
         "knowledge_manager",
+        "notebooklm_bridge",
     ],
     package_data={
         "": ["skills/*/*.md"],

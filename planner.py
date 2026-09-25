@@ -195,6 +195,7 @@ def run_planner(
     timeout_seconds: int = 600,
     models: list[str] | None = None,
     extra_knowledge_dirs: list[pathlib.Path | str] | None = None,
+    notebook_id: str | None = None,
 ) -> pathlib.Path:
     """Gọi Planner Subagent để khảo sát repo và tạo task.json + plan.md.
 
@@ -210,6 +211,8 @@ def run_planner(
         repo_path=repo_path,
         extra_dirs=extra_knowledge_dirs,
         susu_home=susu_home,
+        notebook_id=notebook_id,
+        user_prompt=user_prompt,
     )
     available_skills = knowledge_manager.list_available_skills()
 

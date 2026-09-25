@@ -170,6 +170,8 @@ DOC_PATTERNS = [
     "dbt_project.yml", "dbt_project.yaml",
 ]
 
+import notebooklm_bridge
+
 ALLOWED_EXTENSIONS = {".md", ".txt", ".sql", ".yml", ".yaml", ".json"}
 
 
@@ -177,11 +179,14 @@ def scan_project_docs(
     repo_path: pathlib.Path,
     extra_dirs: list[pathlib.Path | str] | None = None,
     susu_home: pathlib.Path | None = None,
-    max_total_chars: int = 12000,
+    notebook_id: str | None = None,
+    user_prompt: str | None = None,
+    max_total_chars: int = 15000,
 ) -> tuple[str, list[str]]:
-    """Quét và nạp tài liệu kiến trúc, data schemas, data contracts và NotebookLM exports.
+    """Quét và nạp tài liệu kiến trúc, data schemas, data contracts và NotebookLM exports/live queries.
 
-    Hỗ trợ 4 nguồn tri thức:
+    Hỗ trợ 5 nguồn tri thức:
+    0. Truy vấn RAG trực tiếp từ Google NotebookLM bằng notebook_id (nếu có).
     1. Các file kiến trúc chuẩn ở thư mục gốc repo (ARCHITECTURE.md, SCHEMA.md, PIPELINE.md...).
     2. Các thư mục tri thức trong repo (knowledge/, notebooklm/, docs/, schemas/, contracts/).
     3. Thư mục tri thức dùng chung toàn cục (~/.susu/knowledge/).
@@ -192,6 +197,21 @@ def scan_project_docs(
     """
     found_docs: list[tuple[str, str, str]] = []  # (display_path, category, content)
     loaded_names: list[str] = []
+
+    # 0. Truy vấn RAG trực tiếp từ Google NotebookLM
+    if notebook_id:
+        if notebooklm_bridge.is_authenticated():
+            print(f"🔗 [NOTEBOOKLM DIRECT] Đang truy vấn RAG trực tiếp từ Google Notebook (ID: {notebook_id[:12]}...)...")
+            q_text = (
+                f"Tóm tắt các quy tắc kiến trúc, data schemas, data pipeline conventions, "
+                f"và business logic liên quan trực tiếp đến task sau: {user_prompt or 'Dự án hiện tại'}"
+            )
+            resp = notebooklm_bridge.query_notebook_direct(notebook_id, q_text, timeout_seconds=45)
+            if resp:
+                found_docs.append((f"NotebookLM Live (ID: {notebook_id[:8]}...)", "Google NotebookLM Live Grounding", resp))
+                loaded_names.append(f"Google NotebookLM ({notebook_id[:8]}...)")
+        else:
+            print("💡 [NOTEBOOKLM HINT] Phát hiện notebook_id nhưng máy chưa đăng nhập. Chạy 'susu --notebooklm-login' để kết nối trực tiếp.")
 
     # 1. Quét file tài liệu chuẩn ở root repo
     for doc_name in DOC_PATTERNS:
