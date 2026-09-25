@@ -12,6 +12,7 @@ setup(
         "git_manager",
         "test_runner",
         "logger",
+        "subagent_roles",
     ],
     python_requires=">=3.10",
     entry_points={

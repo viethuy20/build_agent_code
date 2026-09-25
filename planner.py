@@ -34,8 +34,18 @@ def build_planner_prompt(
     task_dir_str = str(task_dir.resolve()).replace("\\", "/")
     repo_path_str = str(repo_path.resolve()).replace("\\", "/")
 
-    return f"""Bạn là Architect / Planner Subagent cho một dự án phần mềm.
-Nhiệm vụ của bạn là khảo sát repository và lập kế hoạch thực hiện task theo yêu cầu của người dùng.
+    return f"""Bạn là Tech Lead & Manager Agent tối cao cho dự án phần mềm này.
+Nhiệm vụ của bạn là:
+1. Khảo sát toàn diện repository đích (cấu trúc code, ngôn ngữ, convention, testing framework).
+2. Phân tích yêu cầu từ người dùng và chia nhỏ thành kế hoạch thực thi rõ ràng, chi tiết.
+3. Đánh giá mức độ rủi ro (risk_level: LOW / MEDIUM / HIGH).
+4. Phân loại tính chất task và QUYẾT ĐỊNH CHỈ ĐỊNH SUBAGENT CHUYÊN TRÁCH (assigned_subagent) phù hợp nhất từ danh sách sau:
+   - `backend_specialist`: Dành cho task Backend, API, Database, Xử lý dữ liệu, Services, Async/Concurrency. (Model khuyến nghị: `gemini-3.8-flash-medium` hoặc `claude-sonnet-4-6` nếu thuật toán/kiến trúc rất phức tạp)
+   - `frontend_specialist`: Dành cho task Giao diện người dùng, Web UI, CSS, Component, Layout, Responsive, HTML. (Model khuyến nghị: `gemini-3.8-flash-medium`)
+   - `senior_debugger`: Dành cho task Điều tra bug khó, lỗi ngoại lệ, phân tích root cause, vá lỗi bảo mật. (Model khuyến nghị: `claude-sonnet-4-6`)
+   - `refactor_architect`: Dành cho task Tái cấu trúc mã nguồn, tối ưu hóa Clean Code, Design Patterns, SOLID. (Model khuyến nghị: `gemini-3.8-flash-medium`)
+   - `test_engineer`: Dành cho task Viết test cases chuyên sâu, mock, coverage, QA. (Model khuyến nghị: `gemini-3.8-flash-medium`)
+   - `general_coder`: Dành cho task lập trình tổng hợp hoặc CRUD cơ bản. (Model khuyến nghị: `gemini-3.8-flash-medium`)
 
 # YÊU CẦU TỪ NGƯỜI DÙNG:
 {user_prompt}
@@ -56,6 +66,13 @@ FILE 1: `{task_dir_str}/task.json`
   "task_id": "{task_id}",
   "title": "Tiêu đề ngắn gọn mô tả task",
   "description": "Mô tả chi tiết mục tiêu cần đạt được",
+  "task_type": "backend | frontend | bugfix | refactor | testing | general",
+  "assigned_subagent": {{
+    "role": "backend_specialist | frontend_specialist | senior_debugger | refactor_architect | test_engineer | general_coder",
+    "recommended_model": "gemini-3.8-flash-medium | claude-sonnet-4-6",
+    "reason": "Lý do Manager chọn subagent và model này",
+    "focus_instructions": "Chỉ đạo cụ thể của Manager gửi riêng cho Subagent này khi thực hiện"
+  }},
   "requirements": [
     "Yêu cầu cụ thể 1",
     "Yêu cầu cụ thể 2"
@@ -80,13 +97,18 @@ FILE 2: `{task_dir_str}/plan.md`
 ## 1. Inspect & Architecture
 (Mô tả các file hiện có liên quan và convention cần tuân thủ)
 
-## 2. Implementation Steps
+## 2. Manager Directive & Assigned Subagent
+- **Assigned Role:** (Tên role subagent được phân công)
+- **Recommended Model:** (Model được chỉ định)
+- **Key Focus:** (Trọng tâm kỹ thuật mà Subagent phải chú ý)
+
+## 3. Implementation Steps
 (Từng bước cụ thể: tạo file gì, sửa hàm nào, logic ra sao)
 
-## 3. Test Strategy
+## 4. Test Strategy
 (Các test cases cần viết để đảm bảo đúng tiêu chí nghiệm thu)
 
-## 4. Verification
+## 5. Verification
 (Lệnh test kiểm tra cuối cùng)
 
 Hãy bắt đầu khảo sát và tạo ngay 2 file trên vào thư mục `{task_dir_str}`!

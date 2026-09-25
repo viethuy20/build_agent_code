@@ -1,33 +1,36 @@
-# Susu — Multi-Agent AI Software Engineering CLI (v0.4)
+# Susu — Multi-Agent AI Software Engineering CLI (v0.5)
 
-Hệ thống Agentic tự động hóa quy trình phát triển phần mềm với lớp phòng vệ an toàn nhiều tầng:
-**User Prompt / File Task → Planner Subagent (khảo sát & lập plan) → Coder Subagent (thực thi) → Safety Guards (Protected Paths & Diff Size) → Tester Verifier (kiểm thử & tự sửa lỗi) → Human Review (giữ code trên branch để bạn tự kiểm tra, hoặc tuỳ chọn --auto-commit)**
+Hệ thống Agentic tự động hóa quy trình phát triển phần mềm theo mô hình **Manager - Specialized Subagents** với lớp phòng vệ an toàn nhiều tầng:
+**User Prompt / File Task → Tech Lead Manager Agent (Khảo sát, lập plan & tuyển chọn Subagent) → Specialized Subagent (Backend / Frontend / Debugger / Refactor / QA) → Safety Guards (Protected Paths & Diff Size) → Tester Verifier (kiểm thử & tự sửa lỗi) → Human Review (giữ code trên branch để bạn tự kiểm tra)**
 
 ---
 
 ## 🚀 Tính năng nổi bật
 
-1. **Lệnh CLI toàn cục `susu` (Đã cài đặt sẵn trên máy):**
-   - Đã được đóng gói và cài đặt vào hệ thống Windows. Đứng ở bất kỳ project nào, bạn chỉ cần mở terminal và gọi lệnh `susu`.
-   - Tự động nhận diện thư mục hiện tại làm repository đích (`--repo .`).
-   - Tự động khởi tạo `git init` và commit ban đầu nếu thư mục project mới chưa có Git.
-   - Toàn bộ lịch sử task, kế hoạch và log được lưu trữ tập trung tại `~/.susu/` (`C:\Users\tranv\.susu/`), giữ cho repo dự án của bạn luôn sạch sẽ 100%.
+1. **Tech Lead / Manager Agent (Điều phối thông minh):**
+   - Không chỉ lập kế hoạch thông thường, **Manager Agent** (chạy bằng model suy luận đỉnh cao `claude-opus-4-6-thinking`) đóng vai trò như một Tech Lead thực thụ:
+     - Khảo sát toàn diện kiến trúc dự án, convention, ngôn ngữ và bộ test.
+     - Phân loại tính chất task (`backend`, `frontend`, `bugfix`, `refactor`, `testing`, `general`).
+     - **Tự động tuyển chọn Subagent chuyên trách (Specialized Worker Role)** và model tối ưu cho từng việc cụ thể.
+     - Gửi chỉ đạo trọng tâm (Manager Focus Directive) trực tiếp cho Subagent thực thi.
 
-2. **Chế độ Review mặc định — Giữ toàn quyền kiểm soát code:**
+2. **Kho Subagent chuyên trách (Specialized Worker Roles):**
+   - **`backend_specialist`**: Chuyên gia Backend, API RESTful, Database, Type Hints, Thread-safety & Async I/O.
+   - **`frontend_specialist`**: Chuyên gia Giao diện người dùng, UI/UX, Semantic HTML, Modern CSS, Responsive & Micro-interactions.
+   - **`senior_debugger`**: Chuyên gia điều tra lỗi sâu (Root Cause Analysis), vá lỗi an toàn, bảo mật & chống regression (Ưu tiên model: `claude-sonnet-4-6`).
+   - **`refactor_architect`**: Chuyên gia tái cấu trúc Clean Code, SOLID, Design Patterns, đảm bảo 100% backward compatibility.
+   - **`test_engineer`**: Kỹ sư QA kiểm thử chuyên sâu, viết test case biên (Edge cases), Isolation, Mocking & Fixtures.
+   - **`general_coder`**: Lập trình viên đa năng cho các tác vụ tổng hợp hoặc CRUD thông dụng.
+
+3. **Chiến lược Model & Cơ chế Fallback thông minh:**
+   - **Tech Lead Manager:** Ưu tiên dùng model suy luận mạnh nhất **`claude-opus-4-6-thinking`**. Nếu hết quota/hạn mức hoặc gặp lỗi, hệ thống tự động fallback sang **`claude-sonnet-4-6`**, và phương án dự phòng cuối cùng là **`gemini-3.8-flash-medium`**.
+   - **Specialized Subagent:** Mặc định sử dụng **`gemini-3.8-flash-medium`** (hoặc `claude-sonnet-4-6` khi gặp task fix bug/kiến trúc khó do Manager chỉ định).
+   - Cho phép ghi đè linh hoạt bằng cờ CLI (`--coder-model`, `--planner-models`) hoặc cấu hình trong `.susu.json`.
+
+4. **Chế độ Review mặc định — Giữ toàn quyền kiểm soát code:**
    - Mặc định hệ thống **KHÔNG tự động commit hay push** code sau khi test pass.
    - Toàn bộ code thay đổi được giữ nguyên vẹn trên nhánh `agent/<task_id>`. Bạn có thể thoải mái xem lại thay đổi bằng `git diff` / `git status`, sau đó tự quyết định commit hoặc rollback (`susu --rollback <task_id>`).
    - Nếu bạn muốn tự động commit, chỉ cần thêm cờ `--auto-commit` khi chạy lệnh hoặc cấu hình `"auto_commit": true` trong `.susu.json`.
-
-3. **Chiến lược Model & Cơ chế Fallback thông minh:**
-   - **Planner Subagent (Khảo sát & Lập kế hoạch):** Ưu tiên dùng model suy luận mạnh nhất **`claude-opus-4-6-thinking`**. Nếu hết quota/hạn mức hoặc gặp lỗi, hệ thống tự động fallback sang **`claude-sonnet-4-6`**, và phương án dự phòng cuối cùng là **`gemini-3.8-flash-medium`**.
-   - **Coder Subagent (Viết code & Tự sửa lỗi):** Mặc định sử dụng **`gemini-3.8-flash-medium`** để tối ưu tốc độ sinh code, hạn mức dồi dào và khả năng code chính xác.
-   - Cho phép tuỳ biến model qua cờ CLI (`--coder-model`, `--planner-models`) hoặc qua file cấu hình `.susu.json`.
-
-4. **Chế độ Full-Auto & Phân loại rủi ro (Risk Classification):**
-   - **Subagent 1 (Planner):** Tự động đọc repository đích, phân tích convention và test framework (`unittest`, `pytest`...), sau đó tự sinh `task.json` + `plan.md`.
-   - **Phân loại rủi ro:** Planner tự động đánh giá mức độ rủi ro của task (`LOW`, `MEDIUM`, `HIGH`). Nếu task có rủi ro cao (đụng đến schema DB, auth, credentials, bảo mật), hệ thống sẽ cảnh báo chi tiết trước khi triển khai.
-   - **Subagent 2 (Coder):** Tiếp nhận kế hoạch và trực tiếp viết code trên branch Git riêng biệt (`agent/<task_id>`).
-   - **Tester Verifier (Nguyên tắc "Không tin Agent tự báo cáo"):** Tự động chạy lại bộ test độc lập. Nếu test fail do code sai, tự động gom log lỗi và yêu cầu Coder sửa lại (Self-Correction feedback loop, tối đa 2 lần thử).
 
 5. **Lớp phòng vệ an toàn đa tầng (Safety Guards):**
    - **Protected Paths Guard:** Chặn cứng và huỷ ngay lập tức nếu Agent cố tình sửa hoặc tạo mới các file nhạy cảm (`.env*`, `*.pem`, `*.key`, `*secret*`, `*credential*`, `.git/*`).
@@ -37,8 +40,11 @@ Hệ thống Agentic tự động hóa quy trình phát triển phần mềm v�
 6. **Lệnh Rollback tức thì (`susu --rollback <task_id>`):**
    - Cho phép người dùng huỷ bỏ nhanh chóng branch của một task và khôi phục working tree về branch gốc chỉ với 1 câu lệnh.
 
-7. **Cấu hình linh hoạt theo từng dự án (`.susu.json` / `.susu.yaml`):**
-   - Hỗ trợ file `.susu.json` đặt tại thư mục gốc của project để cấu hình lệnh test riêng, base branch riêng, model riêng, danh sách protected paths bổ sung, ngưỡng diff và bật tắt `auto_commit`.
+7. **Lệnh CLI toàn cục `susu` (Đã cài đặt sẵn trên máy):**
+   - Đứng ở bất kỳ project nào, bạn chỉ cần mở terminal và gọi lệnh `susu`.
+   - Tự động nhận diện thư mục hiện tại làm repository đích (`--repo .`).
+   - Tự động khởi tạo `git init` và commit ban đầu nếu thư mục project mới chưa có Git.
+   - Toàn bộ lịch sử task, kế hoạch và log được lưu trữ tập trung tại `~/.susu/` (`C:\Users\tranv\.susu/`), giữ cho repo dự án của bạn luôn sạch sẽ 100%.
 
 ---
 

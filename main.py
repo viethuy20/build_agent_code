@@ -36,6 +36,7 @@ import agy_worker
 import git_manager
 from logger import TaskLogger
 import planner
+import subagent_roles
 import test_runner
 
 # Đảm bảo in tiếng Việt trên console Windows không bị UnicodeEncodeError
@@ -93,12 +94,23 @@ def load_task(task_dir: pathlib.Path) -> dict:
 
 
 def build_initial_prompt(task: dict) -> str:
+    assigned = task.get("assigned_subagent", {})
+    role_name = assigned.get("role", "general_coder")
+    role_def = subagent_roles.get_role_definition(role_name)
+    role_title = role_def.get("title", "Software Engineer Subagent")
+    guidelines = "\n".join(f"- {g}" for g in role_def.get("guidelines", []))
+    manager_focus = assigned.get("focus_instructions", "")
+
     requirements = "\n".join(f"- {r}" for r in task.get("requirements", []))
     acceptance = "\n".join(f"- {a}" for a in task.get("acceptance_criteria", []))
+    focus_section = f"\n- CHỈ ĐẠO TRỌNG TÂM TỪ MANAGER: {manager_focus}" if manager_focus else ""
 
-    return f"""Bạn là implementation worker cho một task Data Engineering.
-Không cần hỏi lại người dùng — hãy tự đọc repository hiện tại và implement
-theo đúng kế hoạch dưới đây.
+    return f"""Bạn là {role_title} được Tech Lead / Manager Agent chỉ định thực hiện task này.
+Không cần hỏi lại người dùng — hãy tự đọc repository hiện tại và triển khai
+chính xác theo kế hoạch và tiêu chuẩn kỹ thuật dưới đây.
+
+# VAI TRÒ & NGUYÊN TẮC CHUYÊN MÔN CỦA BẠN ({role_title}):
+{guidelines}{focus_section}
 
 # Task: {task.get('title', task.get('task_id'))}
 
@@ -111,15 +123,16 @@ theo đúng kế hoạch dưới đây.
 ## Tiêu chí nghiệm thu
 {acceptance}
 
-## Kế hoạch implementation (đã được duyệt trước)
+## Kế hoạch implementation (do Tech Lead Manager phê duyệt)
 {task['_plan_md']}
 
 ## Việc bạn cần làm
 1. Đọc code hiện có trong repository để hiểu convention đang dùng.
-2. Implement đúng theo kế hoạch ở trên, không tự ý mở rộng phạm vi.
-3. Sau khi implement xong, DỪNG LẠI. Không cần tự chạy test hay tự commit
+2. Tuân thủ nghiêm ngặt nguyên tắc chuyên môn của vai trò {role_title}.
+3. Implement đúng theo kế hoạch ở trên, không tự ý mở rộng phạm vi.
+4. Sau khi implement xong, DỪNG LẠI. Không cần tự chạy test hay tự commit
    — phần đó do hệ thống bên ngoài đảm nhiệm.
-4. Không được: chạm vào credential thật, gọi API production, xoá dữ liệu,
+5. Không được: chạm vào credential thật, gọi API production, xoá dữ liệu,
    force-push, hoặc thay đổi file ngoài phạm vi task này.
 """
 
@@ -313,7 +326,33 @@ def main() -> int:
     task = load_task(task_dir)
     task_id = task.get("task_id", task_dir.name)
 
-    # 3. Phân loại và cảnh báo mức độ rủi ro (Risk Classification)
+    # 3. Phân loại và tuyển chọn Subagent từ Tech Lead Manager
+    assigned = task.get("assigned_subagent", {})
+    role_name = assigned.get("role", "general_coder")
+    role_def = subagent_roles.get_role_definition(role_name)
+    role_title = role_def.get("title", "General Coder")
+    role_desc = role_def.get("description", "")
+    recommended_model = assigned.get("recommended_model") or role_def.get("default_model", agy_worker.DEFAULT_CODER_MODEL)
+
+    # Độ ưu tiên Model: Cờ dòng lệnh --coder-model > .susu.json coder_model > Đề xuất của Manager > Mặc định hệ thống
+    if args.coder_model:
+        active_coder_model = args.coder_model
+    elif "coder_model" in project_config:
+        active_coder_model = project_config["coder_model"]
+    else:
+        active_coder_model = recommended_model
+
+    print(f"\n[MANAGER DISPATCH] Tech Lead Manager đã tuyển chọn Subagent:")
+    print(f"  • Subagent: {role_title} ({role_name})")
+    print(f"  • Chuyên môn: {role_desc}")
+    print(f"  • Model thực thi: {active_coder_model}")
+    if assigned.get("reason"):
+        print(f"  • Lý do phân công: {assigned['reason']}")
+    if assigned.get("focus_instructions"):
+        print(f"  • Chỉ đạo trọng tâm: {assigned['focus_instructions']}")
+    print()
+
+    # 4. Phân loại và cảnh báo mức độ rủi ro (Risk Classification)
     risk_level = task.get("risk_level", "LOW").upper()
     risk_reasons = task.get("risk_reasons", [])
     if risk_level == "HIGH":
@@ -340,6 +379,8 @@ def main() -> int:
     logger.log(f"task_dir={task_dir}")
     logger.log(f"title={task.get('title', '')}")
     logger.log(f"risk_level={risk_level}")
+    logger.log(f"subagent_role={role_title} ({role_name})")
+    logger.log(f"subagent_model={active_coder_model}")
 
     try:
         # --- 1. Git branch cô lập ---
@@ -355,7 +396,7 @@ def main() -> int:
 
         for attempt in range(1, MAX_ATTEMPTS + 1):
             logger.section(f"ATTEMPT {attempt}/{MAX_ATTEMPTS}")
-            logger.log(f"GEMINI/AGY STARTED (model={coder_model})")
+            logger.log(f"SUBAGENT STARTED: {role_title} (model={active_coder_model})")
 
             agy_result = agy_worker.run_agy(
                 prompt=current_prompt,
@@ -365,7 +406,7 @@ def main() -> int:
                 mode=mode,
                 attempt=attempt,
                 timeout_seconds=task_timeout,
-                model=coder_model,
+                model=active_coder_model,
             )
 
             if not agy_result.ok:
