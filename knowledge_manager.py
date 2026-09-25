@@ -155,7 +155,7 @@ def load_selected_skills(skill_names: list[str], custom_skills_dir: pathlib.Path
 
 
 # ==============================================================================
-# TẦNG 3: QUÉT VÀ NẠP TÀI LIỆU KIẾN TRÚC DỰ ÁN (PROJECT DOCS / NOTEBOOKLM)
+# TẦNG 3: QUÉT VÀ NẠP TÀI LIỆU KIẾN TRÚC DỰ ÁN (PROJECT DOCS / NOTEBOOKLM / SCHEMAS)
 # ==============================================================================
 
 DOC_PATTERNS = [
@@ -165,50 +165,126 @@ DOC_PATTERNS = [
     "RULES.md", "rules.md",
     "CONVENTIONS.md", "conventions.md",
     "CONTRIBUTING.md", "contributing.md",
+    "DATA_PIPELINE.md", "data_pipeline.md", "PIPELINE.md", "pipeline.md",
+    "DATA_DICTIONARY.md", "data_dictionary.md", "ERD.md", "erd.md",
+    "dbt_project.yml", "dbt_project.yaml",
 ]
 
+ALLOWED_EXTENSIONS = {".md", ".txt", ".sql", ".yml", ".yaml", ".json"}
 
-def scan_project_docs(repo_path: pathlib.Path, max_total_chars: int = 8000) -> str:
-    """Quét các tài liệu kiến trúc, hướng dẫn thiết kế hoặc export từ NotebookLM trong dự án."""
-    found_docs: list[tuple[str, str]] = []
 
-    # 1. Quét các file kiến trúc ở thư mục gốc
+def scan_project_docs(
+    repo_path: pathlib.Path,
+    extra_dirs: list[pathlib.Path | str] | None = None,
+    susu_home: pathlib.Path | None = None,
+    max_total_chars: int = 12000,
+) -> tuple[str, list[str]]:
+    """Quét và nạp tài liệu kiến trúc, data schemas, data contracts và NotebookLM exports.
+
+    Hỗ trợ 4 nguồn tri thức:
+    1. Các file kiến trúc chuẩn ở thư mục gốc repo (ARCHITECTURE.md, SCHEMA.md, PIPELINE.md...).
+    2. Các thư mục tri thức trong repo (knowledge/, notebooklm/, docs/, schemas/, contracts/).
+    3. Thư mục tri thức dùng chung toàn cục (~/.susu/knowledge/).
+    4. Các thư mục cấu hình tuỳ chỉnh truyền từ CLI flag --knowledge-dir hoặc .susu.json.
+
+    Trả về:
+        (combined_text_for_prompt, list_of_loaded_document_names)
+    """
+    found_docs: list[tuple[str, str, str]] = []  # (display_path, category, content)
+    loaded_names: list[str] = []
+
+    # 1. Quét file tài liệu chuẩn ở root repo
     for doc_name in DOC_PATTERNS:
         doc_file = repo_path / doc_name
         if doc_file.is_file():
             try:
                 text = doc_file.read_text(encoding="utf-8", errors="ignore").strip()
                 if text:
-                    found_docs.append((doc_name, text))
+                    cat = "Data Schema / Config" if doc_name.endswith((".sql", ".yml", ".yaml")) else "Architecture & Rules"
+                    found_docs.append((doc_name, cat, text))
+                    loaded_names.append(doc_name)
             except Exception:
                 pass
 
-    # 2. Quét thư mục docs/ hoặc .susu/docs/ hoặc knowledge/
-    candidate_folders = [repo_path / "docs", repo_path / ".susu" / "docs", repo_path / "knowledge"]
-    for folder in candidate_folders:
-        if folder.is_dir():
-            for f in folder.glob("*.md"):
-                if f.is_file() and len(found_docs) < 5:
-                    try:
-                        text = f.read_text(encoding="utf-8", errors="ignore").strip()
-                        rel_path = str(f.relative_to(repo_path))
-                        found_docs.append((rel_path, text))
-                    except Exception:
-                        pass
+    # 2. Các thư mục tri thức chuẩn trong repo
+    repo_candidate_folders = [
+        repo_path / "notebooklm",
+        repo_path / "knowledge",
+        repo_path / "schemas",
+        repo_path / "contracts",
+        repo_path / "docs",
+        repo_path / ".susu" / "knowledge",
+        repo_path / ".susu" / "docs",
+    ]
+
+    # 3. Thư mục tri thức toàn cục của người dùng
+    if susu_home and (susu_home / "knowledge").is_dir():
+        repo_candidate_folders.append(susu_home / "knowledge")
+
+    # 4. Thư mục bổ sung từ config hoặc CLI
+    if extra_dirs:
+        for extra in extra_dirs:
+            p = pathlib.Path(extra).resolve()
+            if p.is_dir() and p not in repo_candidate_folders:
+                repo_candidate_folders.append(p)
+
+    for folder in repo_candidate_folders:
+        if not folder.is_dir():
+            continue
+        try:
+            # Quét đệ quy tìm các file tài liệu/schema
+            for item in folder.rglob("*"):
+                if not item.is_file():
+                    continue
+                if item.suffix.lower() not in ALLOWED_EXTENSIONS:
+                    continue
+                if item.name.startswith("."):
+                    continue
+
+                try:
+                    rel_name = str(item.relative_to(repo_path))
+                except ValueError:
+                    rel_name = f"{folder.name}/{item.name}"
+
+                if rel_name in loaded_names:
+                    continue
+
+                # Phân loại tài liệu
+                lower_path = str(item).lower()
+                if "notebooklm" in lower_path:
+                    category = "NotebookLM Knowledge / Research Notes"
+                elif "schema" in lower_path or item.suffix in (".sql", ".yml", ".yaml", ".json"):
+                    category = "Data Schema / Contracts"
+                elif "pipeline" in lower_path or "etl" in lower_path:
+                    category = "Data Pipeline Specification"
+                else:
+                    category = "Project Documentation"
+
+                try:
+                    text = item.read_text(encoding="utf-8", errors="ignore").strip()
+                    if text:
+                        found_docs.append((rel_name, category, text))
+                        loaded_names.append(rel_name)
+                except Exception:
+                    pass
+
+                if len(loaded_names) >= 15:
+                    break
+        except Exception:
+            pass
 
     if not found_docs:
-        return ""
+        return "", []
 
-    combined_text = "# TÀI LIỆU KIẾN TRÚC DỰ ÁN (PROJECT DOCS & KNOWLEDGE):\n\n"
+    combined_text = "# 📖 KHO TRI THỨC DỰ ÁN, SCHEMAS & NOTEBOOKLM (PROJECT KNOWLEDGE):\n\n"
     total_len = 0
-    for rel_path, content in found_docs:
-        header = f"## File: {rel_path}\n"
-        # Cắt bớt nếu file quá dài để không làm tràn context
-        excerpt = content[:2500] + ("\n...(cắt bớt để tối ưu context)" if len(content) > 2500 else "")
+    for rel_path, category, content in found_docs:
+        header = f"### [{category}] File: `{rel_path}`\n"
+        excerpt = content[:2500] + ("\n...(nội dung đã được cắt bớt để tối ưu context)" if len(content) > 2500 else "")
         block = f"{header}{excerpt}\n\n"
         if total_len + len(block) > max_total_chars:
             break
         combined_text += block
         total_len += len(block)
 
-    return combined_text.strip()
+    return combined_text.strip(), loaded_names

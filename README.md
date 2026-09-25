@@ -37,8 +37,11 @@ Hệ thống Agentic tự động hóa quy trình phát triển phần mềm the
        - `testing-best-practices`: Chiến lược AAA, Mocking/Fixtures, isolation, kiểm thử giá trị biên.
        - `frontend-ui`: Semantic HTML5, CSS tokens, responsive layout, micro-interactions, a11y.
        - `clean-code-refactor`: SOLID principles, bảo tồn 100% backward compatibility, minimal invasive.
-     Manager tự động tuyển chọn và nạp kỹ năng tương ứng cho Subagent khi nhận task.
-   - **Tầng 3 — Quét tài liệu kiến trúc dự án / NotebookLM export (Project Docs):** Tự động phát hiện và hấp thụ tài liệu kiến trúc có sẵn trong repo (`ARCHITECTURE.md`, `SCHEMA.md`, `docs/*.md`, `knowledge/*.md`) để hiểu sâu nghiệp vụ cốt lõi.
+   - **Tầng 3 — Kho Tri Thức Dự Án, Schemas & Google NotebookLM (Project Knowledge Hub):**
+     - **Tích hợp Google NotebookLM:** Hỗ trợ thả các file export từ NotebookLM (Briefing doc, Study Guide, FAQ, Research Notes) vào thư mục `knowledge/notebooklm/` hoặc `knowledge/`. Hệ thống tự động nhận diện và gắn nhãn `[NotebookLM Knowledge]`.
+     - **Data Schemas & Contracts (Tối quan trọng cho DE):** Tự động phát hiện và nạp các file schema DDL, SQL, contracts (`schemas/*.sql`, `contracts/*.json`, `schema.yml`, `dbt_project.yml`, `ERD.md`, `DATA_PIPELINE.md`).
+     - **Tri thức dùng chung (Global Knowledge):** Đọc tri thức chung cho mọi project tại `~/.susu/knowledge/`.
+     - **Truyền tri thức 2 chiều (Dual Injection):** Cả **Tech Lead Manager** (để lên plan chuẩn) và **Coder Subagent** (khi trực tiếp viết code) đều nhận được đầy đủ tri thức Tầng 3 trong prompt thực thi.
 
 4. **Chiến lược Model & Cơ chế Fallback thông minh:**
    - **Tech Lead Manager:** Ưu tiên dùng model suy luận mạnh nhất **`claude-opus-4-6-thinking`**. Nếu hết quota/hạn mức hoặc gặp lỗi, hệ thống tự động fallback sang **`claude-sonnet-4-6`**, và phương án dự phòng cuối cùng là **`gemini-3.8-flash-medium`**.
@@ -106,6 +109,7 @@ susu --task tasks/TASK-001
 ```
 
 ### Các tùy chọn bổ sung:
+- `-k, --knowledge-dir <dir>`: Chỉ định thư mục kho tri thức ngoài hoặc NotebookLM export (vd: `susu -f task.md -k ./knowledge`).
 - `--auto-commit`: Tự động commit code khi test PASS (mặc định tắt để bạn tự review code).
 - `--coder-model <model>`: Chỉ định model cho Coder Subagent (mặc định: `gemini-3.8-flash-medium`).
 - `--planner-models <models>`: Danh sách model ưu tiên cho Planner, phân cách bằng dấu phẩy (mặc định: `claude-opus-4-6-thinking,claude-sonnet-4-6,gemini-3.8-flash-medium`).
@@ -130,6 +134,11 @@ Bạn có thể tạo file `.susu.json` trong thư mục gốc của repo để 
     "claude-opus-4-6-thinking",
     "claude-sonnet-4-6",
     "gemini-3.8-flash-medium"
+  ],
+  "knowledge_dirs": [
+    "knowledge",
+    "notebooklm",
+    "schemas"
   ],
   "test_commands": [
     "python -m unittest discover tests"

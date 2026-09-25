@@ -177,7 +177,12 @@ def load_task(task_dir: pathlib.Path) -> dict:
     return task
 
 
-def build_initial_prompt(task: dict, skills_content: str = "", project_memory: str = "") -> str:
+def build_initial_prompt(
+    task: dict,
+    skills_content: str = "",
+    project_memory: str = "",
+    project_docs: str = "",
+) -> str:
     assigned = task.get("assigned_subagent", {})
     role_name = assigned.get("role", "general_coder")
     role_def = subagent_roles.get_role_definition(role_name)
@@ -191,6 +196,7 @@ def build_initial_prompt(task: dict, skills_content: str = "", project_memory: s
 
     memory_section = f"\n# 🧠 KINH NGHIỆM ĐÃ TÍCH LŨY CỦA DỰ ÁN (PROJECT MEMORY):\n{project_memory}\n" if project_memory else ""
     skills_section = f"\n# 📚 CẨM NANG KỸ NĂNG CHUYÊN SÂU ĐƯỢC TRANG BỊ:\n{skills_content}\n" if skills_content else ""
+    docs_section = f"\n{project_docs}\n" if project_docs else ""
 
     return f"""Bạn là {role_title} được Tech Lead / Manager Agent chỉ định thực hiện task này.
 Không cần hỏi lại người dùng — hãy tự đọc repository hiện tại và triển khai
@@ -198,7 +204,7 @@ chính xác theo kế hoạch và tiêu chuẩn kỹ thuật dưới đây.
 
 # VAI TRÒ & NGUYÊN TẮC CHUYÊN MÔN CỦA BẠN ({role_title}):
 {guidelines}{focus_section}
-{memory_section}{skills_section}
+{memory_section}{skills_section}{docs_section}
 # Task: {task.get('title', task.get('task_id'))}
 
 ## Mô tả
@@ -313,6 +319,13 @@ def main() -> int:
     parser.add_argument("--task-id", help="Mã task (tự sinh nếu không truyền khi dùng prompt)")
     parser.add_argument("--base-branch", default=None, help="Branch gốc để tạo nhánh agent/ (mặc định: main)")
     parser.add_argument("--timeout", type=int, default=None, help="Timeout cho mỗi lần gọi agy (giây, mặc định: 1800)")
+    parser.add_argument(
+        "--knowledge-dir",
+        "-k",
+        dest="knowledge_dir",
+        default=None,
+        help="Đường dẫn thư mục kho tri thức, schema, hoặc NotebookLM export (ví dụ: ./knowledge hoặc D:\\notes\\notebooklm)",
+    )
     args = parser.parse_args()
 
     repo_path = pathlib.Path(args.repo).resolve()
@@ -337,6 +350,17 @@ def main() -> int:
         planner_models = project_config["planner_models"]
     else:
         planner_models = planner.DEFAULT_PLANNER_MODELS
+
+    # Thu thập các thư mục tri thức bổ sung (CLI flag hoặc .susu.json)
+    extra_knowledge_dirs: list[pathlib.Path | str] = []
+    if args.knowledge_dir:
+        extra_knowledge_dirs.append(args.knowledge_dir)
+    cfg_kdirs = project_config.get("knowledge_dirs") or project_config.get("knowledge_dir")
+    if cfg_kdirs:
+        if isinstance(cfg_kdirs, list):
+            extra_knowledge_dirs.extend(cfg_kdirs)
+        elif isinstance(cfg_kdirs, str):
+            extra_knowledge_dirs.append(cfg_kdirs)
 
     # 0. Xử lý lệnh Rollback nếu được gọi
     if args.rollback_task_id:
@@ -406,6 +430,7 @@ def main() -> int:
                 logs_dir=logs_dir,
                 timeout_seconds=600,
                 models=planner_models,
+                extra_knowledge_dirs=extra_knowledge_dirs,
             )
             print(f"\n[BƯỚC 1 HOÀN TẤT] Bản kế hoạch và phân công đã lưu tại: {task_dir}")
         except Exception as exc:
@@ -434,10 +459,15 @@ def main() -> int:
     else:
         active_coder_model = recommended_model
 
-    # Nạp Kỹ năng (Skills) và Kinh nghiệm dự án (Project Memory)
+    # Nạp 3 Tầng Tri thức: Skills, Project Memory và Kho Tri thức / NotebookLM / Schemas
     relevant_skills = task.get("relevant_skills", [])
     skills_content = knowledge_manager.load_selected_skills(relevant_skills)
     project_memory = knowledge_manager.load_repo_memory(repo_path, susu_home)
+    project_docs, loaded_docs = knowledge_manager.scan_project_docs(
+        repo_path=repo_path,
+        extra_dirs=extra_knowledge_dirs,
+        susu_home=susu_home,
+    )
 
     print("\n" + "=" * 60)
     print(f"[BƯỚC 2: MANAGER PHÂN CÔNG SUBAGENT THỰC THI]")
@@ -449,6 +479,8 @@ def main() -> int:
         print(f"  • Kỹ năng được trang bị (Skills): {', '.join(relevant_skills)}")
     if project_memory:
         print("  • Tích lũy kinh nghiệm: Đã kết nối với Project Memory")
+    if loaded_docs:
+        print(f"  • Kho tri thức & NotebookLM: Đã nạp {len(loaded_docs)} tài liệu ({', '.join(loaded_docs[:3])}{'...' if len(loaded_docs) > 3 else ''})")
     if assigned.get("reason"):
         print(f"  • Lý do Manager chọn: {assigned['reason']}")
     if assigned.get("focus_instructions"):
@@ -487,6 +519,8 @@ def main() -> int:
     logger.log(f"subagent_model={active_coder_model}")
     if relevant_skills:
         logger.log(f"equipped_skills={', '.join(relevant_skills)}")
+    if loaded_docs:
+        logger.log(f"loaded_knowledge={', '.join(loaded_docs)}")
 
     try:
         # --- 1. Git branch cô lập ---
@@ -500,6 +534,7 @@ def main() -> int:
             task=task,
             skills_content=skills_content,
             project_memory=project_memory,
+            project_docs=project_docs,
         )
         current_prompt = initial_prompt
         commit_hash = None

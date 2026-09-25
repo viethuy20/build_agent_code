@@ -194,6 +194,7 @@ def run_planner(
     logs_dir: pathlib.Path,
     timeout_seconds: int = 600,
     models: list[str] | None = None,
+    extra_knowledge_dirs: list[pathlib.Path | str] | None = None,
 ) -> pathlib.Path:
     """Gọi Planner Subagent để khảo sát repo và tạo task.json + plan.md.
 
@@ -205,13 +206,17 @@ def run_planner(
 
     susu_home = tasks_dir.parent
     project_memory = knowledge_manager.load_repo_memory(repo_path, susu_home)
-    project_docs = knowledge_manager.scan_project_docs(repo_path)
+    project_docs, loaded_docs = knowledge_manager.scan_project_docs(
+        repo_path=repo_path,
+        extra_dirs=extra_knowledge_dirs,
+        susu_home=susu_home,
+    )
     available_skills = knowledge_manager.list_available_skills()
 
     if project_memory:
         print("🧠 [PROJECT MEMORY] Đã nạp kinh nghiệm tích lũy từ các task trước.")
-    if project_docs:
-        print("📖 [PROJECT DOCS] Đã nạp tài liệu kiến trúc dự án.")
+    if loaded_docs:
+        print(f"📖 [KHO TRI THỨC & NOTEBOOKLM] Đã nạp {len(loaded_docs)} tài liệu: {', '.join(loaded_docs[:4])}{'...' if len(loaded_docs) > 4 else ''}")
 
     planner_prompt = build_planner_prompt(
         user_prompt=user_prompt,
