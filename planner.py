@@ -112,6 +112,13 @@ def _try_extract_json(text: str) -> dict[str, Any] | None:
     return None
 
 
+DEFAULT_PLANNER_MODELS = [
+    "claude-opus-4-6-thinking",
+    "claude-sonnet-4-6",
+    "gemini-3.8-flash-medium",
+]
+
+
 def run_planner(
     user_prompt: str,
     repo_path: pathlib.Path,
@@ -120,9 +127,11 @@ def run_planner(
     mode: str,
     logs_dir: pathlib.Path,
     timeout_seconds: int = 600,
+    models: list[str] | None = None,
 ) -> pathlib.Path:
     """Gọi Planner Subagent để khảo sát repo và tạo task.json + plan.md.
 
+    Tự động fallback tuần tự theo danh sách models (mặc định: Opus Thinking -> Sonnet -> Gemini 3.8 Flash Medium).
     Trả về task_dir chứa 2 file đã tạo.
     """
     task_dir = (tasks_dir / task_id).resolve()
@@ -135,108 +144,117 @@ def run_planner(
         task_dir=task_dir,
     )
 
-    raw_log_path = logs_dir / f"{task_id}.planner.agy.log"
     timeout_flag = f"{timeout_seconds}s"
     agy_bin = agy_worker.get_agy_bin()
-
-    # Thêm cả repo_path và task_dir vào --add-dir để agy có quyền đọc repo và ghi vào task_dir
     add_dirs = ["--add-dir", str(repo_path.resolve()), "--add-dir", str(task_dir)]
+    candidate_models = models if models else DEFAULT_PLANNER_MODELS
 
-    if mode == "direct":
-        argv = [
-            agy_bin,
-            "--dangerously-skip-permissions",
-            *add_dirs,
-            "--print-timeout",
-            timeout_flag,
-            "-p",
-            planner_prompt,
-        ]
-        exit_code, output = agy_worker._stream_process(
-            argv,
-            cwd=repo_path,
-            log_path=raw_log_path,
-            timeout_seconds=timeout_seconds,
-            heartbeat_seconds=None,
-        )
-    elif mode == "winpty":
-        argv = [
-            "winpty",
-            agy_bin,
-            "--dangerously-skip-permissions",
-            *add_dirs,
-            "--print-timeout",
-            timeout_flag,
-            "-p",
-            planner_prompt,
-        ]
-        exit_code, output = agy_worker._stream_process(
-            argv,
-            cwd=repo_path,
-            log_path=raw_log_path,
-            timeout_seconds=timeout_seconds,
-            heartbeat_seconds=None,
-        )
-    elif mode == "pty":
-        import os
+    last_error_log = None
+    for idx, model in enumerate(candidate_models):
+        print(f"[SUBAGENT 1: PLANNER] Thử lập kế hoạch với model: '{model}' (ưu tiên {idx + 1}/{len(candidate_models)})...")
+        raw_log_path = logs_dir / f"{task_id}.planner.{model}.agy.log"
+        last_error_log = raw_log_path
+        model_flags = ["--model", model] if model else []
 
-        env = os.environ.copy()
-        env["AGY_PROMPT"] = planner_prompt
-        inner = (
-            f'"{agy_bin}" --dangerously-skip-permissions '
-            f'--add-dir "{str(repo_path.resolve())}" --add-dir "{str(task_dir)}" '
-            f'--print-timeout "{timeout_flag}" -p "$AGY_PROMPT"'
-        )
-        argv = ["script", "-qec", inner, "/dev/null"]
-        exit_code, output = agy_worker._stream_process(
-            argv,
-            cwd=repo_path,
-            log_path=raw_log_path,
-            timeout_seconds=timeout_seconds,
-            heartbeat_seconds=None,
-            env=env,
-        )
-    else:
-        raise PlannerError(f"Chế độ mode='{mode}' không được hỗ trợ để chạy Planner.")
+        if mode == "direct":
+            argv = [
+                agy_bin,
+                "--dangerously-skip-permissions",
+                *model_flags,
+                *add_dirs,
+                "--print-timeout",
+                timeout_flag,
+                "-p",
+                planner_prompt,
+            ]
+            exit_code, output = agy_worker._stream_process(
+                argv,
+                cwd=repo_path,
+                log_path=raw_log_path,
+                timeout_seconds=timeout_seconds,
+                heartbeat_seconds=None,
+            )
+        elif mode == "winpty":
+            argv = [
+                "winpty",
+                agy_bin,
+                "--dangerously-skip-permissions",
+                *model_flags,
+                *add_dirs,
+                "--print-timeout",
+                timeout_flag,
+                "-p",
+                planner_prompt,
+            ]
+            exit_code, output = agy_worker._stream_process(
+                argv,
+                cwd=repo_path,
+                log_path=raw_log_path,
+                timeout_seconds=timeout_seconds,
+                heartbeat_seconds=None,
+            )
+        elif mode == "pty":
+            import os
 
-    if exit_code != 0:
-        raise PlannerError(f"Planner Subagent thất bại với exit code {exit_code}. Xem log: {raw_log_path}")
+            env = os.environ.copy()
+            env["AGY_PROMPT"] = planner_prompt
+            model_str = f'--model "{model}" ' if model else ""
+            inner = (
+                f'"{agy_bin}" --dangerously-skip-permissions {model_str}'
+                f'--add-dir "{str(repo_path.resolve())}" --add-dir "{str(task_dir)}" '
+                f'--print-timeout "{timeout_flag}" -p "$AGY_PROMPT"'
+            )
+            argv = ["script", "-qec", inner, "/dev/null"]
+            exit_code, output = agy_worker._stream_process(
+                argv,
+                cwd=repo_path,
+                log_path=raw_log_path,
+                timeout_seconds=timeout_seconds,
+                heartbeat_seconds=None,
+                env=env,
+            )
+        else:
+            raise PlannerError(f"Chế độ mode='{mode}' không được hỗ trợ để chạy Planner.")
 
+        task_json_path = task_dir / "task.json"
+        plan_md_path = task_dir / "plan.md"
+
+        if exit_code == 0:
+            # Trường hợp 1: agy đã tự tạo trực tiếp cả 2 file
+            if task_json_path.exists() and plan_md_path.exists():
+                try:
+                    data = json.loads(task_json_path.read_text(encoding="utf-8"))
+                    data["planned_by_model"] = model
+                    task_json_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+                    print(f"[SUBAGENT 1: PLANNER] Thành công lập kế hoạch với model '{model}'!")
+                    return task_dir
+                except json.JSONDecodeError:
+                    pass  # Nếu file json lỗi cú pháp, thử phục hồi từ stdout bên dưới
+
+            # Trường hợp 2: Fallback phục hồi nếu agy in ra stdout
+            parsed_json = _try_extract_json(output)
+            if parsed_json:
+                parsed_json["planned_by_model"] = model
+                task_json_path.write_text(json.dumps(parsed_json, indent=2, ensure_ascii=False), encoding="utf-8")
+                if not plan_md_path.exists():
+                    plan_content = output.strip() or f"# Plan {task_id}\n\nThực hiện task: {user_prompt}"
+                    plan_md_path.write_text(plan_content, encoding="utf-8")
+                print(f"[SUBAGENT 1: PLANNER] Thành công trích xuất kế hoạch với model '{model}'!")
+                return task_dir
+
+        print(
+            f"[SUBAGENT 1: PLANNER] Model '{model}' không hoàn thành hoặc gặp lỗi/hết quota (exit_code={exit_code})."
+        )
+        if idx < len(candidate_models) - 1:
+            print(f"[SUBAGENT 1: PLANNER] -> Tự động chuyển sang model dự phòng: '{candidate_models[idx + 1]}'...")
+
+    # Nếu tất cả các model đều thất bại nhưng có plan/task đã tạo từ trước
     task_json_path = task_dir / "task.json"
     plan_md_path = task_dir / "plan.md"
-
-    # Trường hợp 1: agy đã tự tạo trực tiếp cả 2 file
     if task_json_path.exists() and plan_md_path.exists():
-        # Validate định dạng JSON
-        try:
-            json.loads(task_json_path.read_text(encoding="utf-8"))
-            return task_dir
-        except json.JSONDecodeError:
-            pass  # Nếu file json lỗi cú pháp, thử phục hồi từ stdout bên dưới
+        return task_dir
 
-    # Trường hợp 2: Fallback phục hồi nếu agy in ra stdout
-    parsed_json = _try_extract_json(output)
-    if parsed_json:
-        task_json_path.write_text(json.dumps(parsed_json, indent=2, ensure_ascii=False), encoding="utf-8")
-
-    if not plan_md_path.exists():
-        # Nếu chưa có plan.md, lưu output của model làm plan
-        plan_content = output.strip() or f"# Plan {task_id}\n\nThực hiện task: {user_prompt}"
-        plan_md_path.write_text(plan_content, encoding="utf-8")
-
-    # Kiểm tra lần cuối
-    if not task_json_path.exists():
-        # Tạo task.json tối thiểu nếu thiếu
-        fallback_task = {
-            "task_id": task_id,
-            "title": user_prompt[:60],
-            "description": user_prompt,
-            "requirements": [user_prompt],
-            "acceptance_criteria": ["Test pass"],
-            "test_commands": ["python -m unittest discover"],
-            "risk_level": "LOW",
-            "risk_reasons": [],
-        }
-        task_json_path.write_text(json.dumps(fallback_task, indent=2, ensure_ascii=False), encoding="utf-8")
-
-    return task_dir
+    raise PlannerError(
+        f"Tất cả các model ({', '.join(candidate_models)}) đều thất bại khi lập kế hoạch. "
+        f"Xem log gần nhất tại: {last_error_log}"
+    )

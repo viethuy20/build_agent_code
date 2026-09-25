@@ -200,6 +200,16 @@ def main() -> int:
         action="store_true",
         help="Tự động commit khi test PASS (mặc định: tắt để bạn tự review code)",
     )
+    parser.add_argument(
+        "--coder-model",
+        default=None,
+        help="Model cho Coder Subagent (mặc định: gemini-3.8-flash-medium)",
+    )
+    parser.add_argument(
+        "--planner-models",
+        default=None,
+        help="Danh sách model fallback cho Planner, phân cách bằng dấu phẩy (mặc định: claude-opus-4-6-thinking,claude-sonnet-4-6,gemini-3.8-flash-medium)",
+    )
     parser.add_argument("--task-id", help="Mã task (tự sinh nếu không truyền khi dùng prompt)")
     parser.add_argument("--base-branch", default=None, help="Branch gốc để tạo nhánh agent/ (mặc định: main)")
     parser.add_argument("--timeout", type=int, default=None, help="Timeout cho mỗi lần gọi agy (giây, mặc định: 1800)")
@@ -215,6 +225,18 @@ def main() -> int:
     base_branch = args.base_branch or project_config.get("base_branch", "main")
     task_timeout = args.timeout or project_config.get("timeout", 1800)
     auto_commit = args.auto_commit or project_config.get("auto_commit", False)
+
+    coder_model = (
+        args.coder_model
+        or project_config.get("coder_model")
+        or agy_worker.DEFAULT_CODER_MODEL
+    )
+    if args.planner_models:
+        planner_models = [m.strip() for m in args.planner_models.split(",") if m.strip()]
+    elif "planner_models" in project_config:
+        planner_models = project_config["planner_models"]
+    else:
+        planner_models = planner.DEFAULT_PLANNER_MODELS
 
     # 0. Xử lý lệnh Rollback nếu được gọi
     if args.rollback_task_id:
@@ -269,6 +291,7 @@ def main() -> int:
         print(f"\n[SUBAGENT 1: PLANNER] Khởi động Planner Subagent cho {generated_id}...")
         print(f"Yêu cầu: {user_prompt}")
         print(f"Repository: {repo_path}")
+        print(f"Thứ tự model: {' -> '.join(planner_models)}")
         try:
             task_dir = planner.run_planner(
                 user_prompt=user_prompt,
@@ -277,6 +300,8 @@ def main() -> int:
                 tasks_dir=tasks_dir,
                 mode=mode,
                 logs_dir=logs_dir,
+                timeout_seconds=600,
+                models=planner_models,
             )
             print(f"[SUBAGENT 1: PLANNER] Đã lập kế hoạch thành công tại: {task_dir}\n")
         except Exception as exc:
@@ -330,7 +355,7 @@ def main() -> int:
 
         for attempt in range(1, MAX_ATTEMPTS + 1):
             logger.section(f"ATTEMPT {attempt}/{MAX_ATTEMPTS}")
-            logger.log("GEMINI/AGY STARTED")
+            logger.log(f"GEMINI/AGY STARTED (model={coder_model})")
 
             agy_result = agy_worker.run_agy(
                 prompt=current_prompt,
@@ -340,6 +365,7 @@ def main() -> int:
                 mode=mode,
                 attempt=attempt,
                 timeout_seconds=task_timeout,
+                model=coder_model,
             )
 
             if not agy_result.ok:

@@ -18,22 +18,27 @@ Hệ thống Agentic tự động hóa quy trình phát triển phần mềm v�
    - Toàn bộ code thay đổi được giữ nguyên vẹn trên nhánh `agent/<task_id>`. Bạn có thể thoải mái xem lại thay đổi bằng `git diff` / `git status`, sau đó tự quyết định commit hoặc rollback (`susu --rollback <task_id>`).
    - Nếu bạn muốn tự động commit, chỉ cần thêm cờ `--auto-commit` khi chạy lệnh hoặc cấu hình `"auto_commit": true` trong `.susu.json`.
 
-3. **Chế độ Full-Auto & Phân loại rủi ro (Risk Classification):**
+3. **Chiến lược Model & Cơ chế Fallback thông minh:**
+   - **Planner Subagent (Khảo sát & Lập kế hoạch):** Ưu tiên dùng model suy luận mạnh nhất **`claude-opus-4-6-thinking`**. Nếu hết quota/hạn mức hoặc gặp lỗi, hệ thống tự động fallback sang **`claude-sonnet-4-6`**, và phương án dự phòng cuối cùng là **`gemini-3.8-flash-medium`**.
+   - **Coder Subagent (Viết code & Tự sửa lỗi):** Mặc định sử dụng **`gemini-3.8-flash-medium`** để tối ưu tốc độ sinh code, hạn mức dồi dào và khả năng code chính xác.
+   - Cho phép tuỳ biến model qua cờ CLI (`--coder-model`, `--planner-models`) hoặc qua file cấu hình `.susu.json`.
+
+4. **Chế độ Full-Auto & Phân loại rủi ro (Risk Classification):**
    - **Subagent 1 (Planner):** Tự động đọc repository đích, phân tích convention và test framework (`unittest`, `pytest`...), sau đó tự sinh `task.json` + `plan.md`.
    - **Phân loại rủi ro:** Planner tự động đánh giá mức độ rủi ro của task (`LOW`, `MEDIUM`, `HIGH`). Nếu task có rủi ro cao (đụng đến schema DB, auth, credentials, bảo mật), hệ thống sẽ cảnh báo chi tiết trước khi triển khai.
    - **Subagent 2 (Coder):** Tiếp nhận kế hoạch và trực tiếp viết code trên branch Git riêng biệt (`agent/<task_id>`).
    - **Tester Verifier (Nguyên tắc "Không tin Agent tự báo cáo"):** Tự động chạy lại bộ test độc lập. Nếu test fail do code sai, tự động gom log lỗi và yêu cầu Coder sửa lại (Self-Correction feedback loop, tối đa 2 lần thử).
 
-4. **Lớp phòng vệ an toàn đa tầng (Safety Guards):**
+5. **Lớp phòng vệ an toàn đa tầng (Safety Guards):**
    - **Protected Paths Guard:** Chặn cứng và huỷ ngay lập tức nếu Agent cố tình sửa hoặc tạo mới các file nhạy cảm (`.env*`, `*.pem`, `*.key`, `*secret*`, `*credential*`, `.git/*`).
    - **Diff Size Guard:** Chặn đứng Agent nếu số dòng sửa đổi hoặc số file thay đổi vượt quá ngưỡng an toàn (mặc định tối đa 1000 dòng, 30 file), chống tình trạng Agent đi lạc hướng hoặc viết lại cả project.
    - Khi vi phạm bất kỳ lớp bảo vệ nào, hệ thống tự động `reset hard` về trạng thái sạch, tuyệt đối không commit code rác.
 
-5. **Lệnh Rollback tức thì (`susu --rollback <task_id>`):**
+6. **Lệnh Rollback tức thì (`susu --rollback <task_id>`):**
    - Cho phép người dùng huỷ bỏ nhanh chóng branch của một task và khôi phục working tree về branch gốc chỉ với 1 câu lệnh.
 
-6. **Cấu hình linh hoạt theo từng dự án (`.susu.json` / `.susu.yaml`):**
-   - Hỗ trợ file `.susu.json` đặt tại thư mục gốc của project để cấu hình lệnh test riêng, base branch riêng, danh sách protected paths bổ sung, ngưỡng diff và bật tắt `auto_commit`.
+7. **Cấu hình linh hoạt theo từng dự án (`.susu.json` / `.susu.yaml`):**
+   - Hỗ trợ file `.susu.json` đặt tại thư mục gốc của project để cấu hình lệnh test riêng, base branch riêng, model riêng, danh sách protected paths bổ sung, ngưỡng diff và bật tắt `auto_commit`.
 
 ---
 
@@ -78,6 +83,8 @@ susu --task tasks/TASK-001
 
 ### Các tùy chọn bổ sung:
 - `--auto-commit`: Tự động commit code khi test PASS (mặc định tắt để bạn tự review code).
+- `--coder-model <model>`: Chỉ định model cho Coder Subagent (mặc định: `gemini-3.8-flash-medium`).
+- `--planner-models <models>`: Danh sách model ưu tiên cho Planner, phân cách bằng dấu phẩy (mặc định: `claude-opus-4-6-thinking,claude-sonnet-4-6,gemini-3.8-flash-medium`).
 - `--rollback <task_id>`: Huỷ bỏ branch của một task và khôi phục về branch gốc.
 - `--force`, `-y`, `--yes`: Bỏ qua cảnh báo xác nhận khi gặp task rủi ro cao (HIGH RISK).
 - `--base-branch <branch>`: Chọn branch gốc để phân nhánh (mặc định: `main`).
@@ -94,6 +101,12 @@ Bạn có thể tạo file `.susu.json` trong thư mục gốc của repo để 
 {
   "base_branch": "main",
   "auto_commit": false,
+  "coder_model": "gemini-3.8-flash-medium",
+  "planner_models": [
+    "claude-opus-4-6-thinking",
+    "claude-sonnet-4-6",
+    "gemini-3.8-flash-medium"
+  ],
   "test_commands": [
     "python -m unittest discover tests"
   ],

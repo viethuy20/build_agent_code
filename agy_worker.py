@@ -228,6 +228,9 @@ def self_test(workdir: pathlib.Path, logs_dir: pathlib.Path) -> str:
     return "unrecoverable"
 
 
+DEFAULT_CODER_MODEL = "gemini-3.8-flash-medium"
+
+
 def run_agy(
     prompt: str,
     workdir: pathlib.Path,
@@ -237,11 +240,13 @@ def run_agy(
     attempt: int = 1,
     timeout_seconds: int = 1800,
     heartbeat_seconds: int | None = None,
+    model: str = DEFAULT_CODER_MODEL,
 ) -> AgyResult:
-    """Chạy agy headless với prompt đã ghép sẵn.
+    """Chạy agy headless với prompt đã ghép sẵn và model chỉ định.
 
     mode: kết quả từ self_test(), quyết định cách gọi.
     attempt: 1 hoặc 2 (dùng để đặt tên file log riêng cho từng lần thử).
+    model: model AI được dùng (mặc định: gemini-3.8-flash-medium).
     """
     workdir = workdir.resolve()
     raw_log_path = logs_dir / f"{task_id}.attempt{attempt}.agy.log"
@@ -272,10 +277,12 @@ def run_agy(
     add_dir = str(workdir)
     timeout_flag = f"{timeout_seconds}s"
     agy_bin = get_agy_bin()
+    model_flags = ["--model", model] if model else []
 
     if mode == "direct":
         argv = [
             agy_bin, "--dangerously-skip-permissions",
+            *model_flags,
             "--add-dir", add_dir,
             "--print-timeout", timeout_flag,
             "-p", prompt,
@@ -288,6 +295,7 @@ def run_agy(
     elif mode == "winpty":
         argv = [
             "winpty", agy_bin, "--dangerously-skip-permissions",
+            *model_flags,
             "--add-dir", add_dir,
             "--print-timeout", timeout_flag,
             "-p", prompt,
@@ -302,8 +310,9 @@ def run_agy(
         # để tránh vấn đề escape ký tự đặc biệt (dấu ", $, \ trong JSON/markdown).
         env = os.environ.copy()
         env["AGY_PROMPT"] = prompt
+        model_str = f'--model "{model}" ' if model else ""
         inner = (
-            f'"{agy_bin}" --dangerously-skip-permissions '
+            f'"{agy_bin}" --dangerously-skip-permissions {model_str}'
             f'--add-dir "{add_dir}" '
             f'--print-timeout "{timeout_flag}" '
             f'-p "$AGY_PROMPT"'
