@@ -173,7 +173,7 @@ def run_planner(
 
     last_error_log = None
     for idx, model in enumerate(candidate_models):
-        print(f"[SUBAGENT 1: PLANNER] Thử lập kế hoạch với model: '{model}' (ưu tiên {idx + 1}/{len(candidate_models)})...")
+        print(f"\n[TECH LEAD MANAGER] Đang khảo sát repo & lập kế hoạch bằng Model: [{model}] (ưu tiên {idx + 1}/{len(candidate_models)})...")
         raw_log_path = logs_dir / f"{task_id}.planner.{model}.agy.log"
         last_error_log = raw_log_path
         model_flags = ["--model", model] if model else []
@@ -248,7 +248,7 @@ def run_planner(
                     data = json.loads(task_json_path.read_text(encoding="utf-8"))
                     data["planned_by_model"] = model
                     task_json_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-                    print(f"[SUBAGENT 1: PLANNER] Thành công lập kế hoạch với model '{model}'!")
+                    print(f"✅ [TECH LEAD MANAGER] Đã lập kế hoạch & chỉ định Subagent thành công bằng Model: [{model}]!")
                     return task_dir
                 except json.JSONDecodeError:
                     pass  # Nếu file json lỗi cú pháp, thử phục hồi từ stdout bên dưới
@@ -261,14 +261,14 @@ def run_planner(
                 if not plan_md_path.exists():
                     plan_content = output.strip() or f"# Plan {task_id}\n\nThực hiện task: {user_prompt}"
                     plan_md_path.write_text(plan_content, encoding="utf-8")
-                print(f"[SUBAGENT 1: PLANNER] Thành công trích xuất kế hoạch với model '{model}'!")
+                print(f"✅ [TECH LEAD MANAGER] Đã trích xuất kế hoạch & chỉ định Subagent thành công bằng Model: [{model}]!")
                 return task_dir
 
         print(
-            f"[SUBAGENT 1: PLANNER] Model '{model}' không hoàn thành hoặc gặp lỗi/hết quota (exit_code={exit_code})."
+            f"⚠️ [TECH LEAD MANAGER] Model [{model}] không hoàn thành hoặc gặp lỗi/hết quota (exit_code={exit_code})."
         )
         if idx < len(candidate_models) - 1:
-            print(f"[SUBAGENT 1: PLANNER] -> Tự động chuyển sang model dự phòng: '{candidate_models[idx + 1]}'...")
+            print(f"🔄 [TECH LEAD MANAGER] -> Đang tự động chuyển sang Model dự phòng tiếp theo: [{candidate_models[idx + 1]}]...")
 
     # Nếu tất cả các model đều thất bại nhưng có plan/task đã tạo từ trước
     task_json_path = task_dir / "task.json"

@@ -301,10 +301,13 @@ def main() -> int:
     # 2. Xử lý Task: Nếu có prompt, gọi Planner Subagent
     if user_prompt:
         generated_id = args.task_id or f"TASK-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
-        print(f"\n[SUBAGENT 1: PLANNER] Khởi động Planner Subagent cho {generated_id}...")
-        print(f"Yêu cầu: {user_prompt}")
-        print(f"Repository: {repo_path}")
-        print(f"Thứ tự model: {' -> '.join(planner_models)}")
+        print("\n" + "=" * 60)
+        print(f"[BƯỚC 1: TECH LEAD MANAGER — LẬP KẾ HOẠCH & TUYỂN CHỌN SUBAGENT]")
+        print(f"  • Task ID: {generated_id}")
+        print(f"  • Yêu cầu: {user_prompt}")
+        print(f"  • Repository: {repo_path}")
+        print(f"  • Chuỗi Model Manager ưu tiên: {' -> '.join(planner_models)}")
+        print("=" * 60)
         try:
             task_dir = planner.run_planner(
                 user_prompt=user_prompt,
@@ -316,15 +319,16 @@ def main() -> int:
                 timeout_seconds=600,
                 models=planner_models,
             )
-            print(f"[SUBAGENT 1: PLANNER] Đã lập kế hoạch thành công tại: {task_dir}\n")
+            print(f"\n[BƯỚC 1 HOÀN TẤT] Bản kế hoạch và phân công đã lưu tại: {task_dir}")
         except Exception as exc:
-            print(f"ERROR khi chạy Planner Subagent: {exc}")
+            print(f"ERROR khi chạy Tech Lead Manager: {exc}")
             return 1
     else:
         task_dir = pathlib.Path(args.task).resolve()
 
     task = load_task(task_dir)
     task_id = task.get("task_id", task_dir.name)
+    planned_by = task.get("planned_by_model", planner_models[0] if planner_models else "N/A")
 
     # 3. Phân loại và tuyển chọn Subagent từ Tech Lead Manager
     assigned = task.get("assigned_subagent", {})
@@ -342,15 +346,17 @@ def main() -> int:
     else:
         active_coder_model = recommended_model
 
-    print(f"\n[MANAGER DISPATCH] Tech Lead Manager đã tuyển chọn Subagent:")
-    print(f"  • Subagent: {role_title} ({role_name})")
+    print("\n" + "=" * 60)
+    print(f"[BƯỚC 2: MANAGER PHÂN CÔNG SUBAGENT THỰC THI]")
+    print(f"  • Lập kế hoạch bởi: Tech Lead Manager (Model: [{planned_by}])")
+    print(f"  • Subagent được giao việc: {role_title} ({role_name})")
     print(f"  • Chuyên môn: {role_desc}")
-    print(f"  • Model thực thi: {active_coder_model}")
+    print(f"  • Model Subagent đảm nhiệm: [{active_coder_model}]")
     if assigned.get("reason"):
-        print(f"  • Lý do phân công: {assigned['reason']}")
+        print(f"  • Lý do Manager chọn: {assigned['reason']}")
     if assigned.get("focus_instructions"):
         print(f"  • Chỉ đạo trọng tâm: {assigned['focus_instructions']}")
-    print()
+    print("=" * 60 + "\n")
 
     # 4. Phân loại và cảnh báo mức độ rủi ro (Risk Classification)
     risk_level = task.get("risk_level", "LOW").upper()
@@ -379,6 +385,7 @@ def main() -> int:
     logger.log(f"task_dir={task_dir}")
     logger.log(f"title={task.get('title', '')}")
     logger.log(f"risk_level={risk_level}")
+    logger.log(f"planner_model={planned_by}")
     logger.log(f"subagent_role={role_title} ({role_name})")
     logger.log(f"subagent_model={active_coder_model}")
 
@@ -396,6 +403,7 @@ def main() -> int:
 
         for attempt in range(1, MAX_ATTEMPTS + 1):
             logger.section(f"ATTEMPT {attempt}/{MAX_ATTEMPTS}")
+            print(f"🚀 [SUBAGENT ĐANG CODE] {role_title} | Model: [{active_coder_model}] | Lần thử: {attempt}/{MAX_ATTEMPTS}")
             logger.log(f"SUBAGENT STARTED: {role_title} (model={active_coder_model})")
 
             agy_result = agy_worker.run_agy(
